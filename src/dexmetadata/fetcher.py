@@ -42,7 +42,7 @@ def fetch(
     network: str = "base",
     batch_size: int = 30,
     show_progress: bool = True,
-    max_concurrent_batches: int = 12,
+    max_concurrent_batches: int = 25,
 ) -> List[Dict[str, Any]]:
     """
     Fetch metadata for DEX pools using deployless multicall with batching.
