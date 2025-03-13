@@ -1,0 +1,40 @@
+[project]
+name = "dexmetadata"
+version = "0.1.0"
+description = "A deployless multicall library for fetching DEX pool metadata"
+readme = "README.md"
+authors = [
+    { name = "Yaser Martinez Palenzuela", email = "yaser.martinez@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "web3>=6.0.0",
+    "eth-abi>=4.0.0",
+    "pytest>=7.0.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.9.4",
+]
+
+[project.scripts]
+dexmetadata = "dexmetadata.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+
+[tool.uv.sources]
+dexmetadata = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "."
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
