@@ -1,6 +1,6 @@
 # DexMetadata 🦄 
 
-Quickly fetch metadata for DEX pools with a single function call
+Python library for fetching metadata from DEX pools
 
 ![](demo.gif)
 
@@ -34,11 +34,12 @@ assert pools[0].token1.decimals == 8
 
 ## Features 🌟
 
-- operates without the need for custom nodes, storage infrastructure or access to historical data; simply requires standard RPC access.
-- handles 95%+ of swap activity without custom DEX integration / logic
-- concurrent batch processing to minimize latency and RPC calls
-- built-in parameter tuning - includes utility to automatically optimize RPC settings for maximum throughput
-- assembly optimized deployless multicall contract
+- No fancy setup (dbt pipelines / datalake infrastructure / customized nodes) needed, just plug in any standard RPC and you're good to go
+- Uses some clever EVM tricks (assembly optimized deployless multicall) to get the job done quickly and cheaply
+- Covers 95%+ of swaps out there without DEX-specific custom transform logic
+- Processes multiple pools at once to keep things fast and efficient
+- Handy tool to automatically find good settings for your RPC
+
 
 ## Installation 📥
 
@@ -54,6 +55,58 @@ $ uv add dexmetadata
 3. Then for each token we get token name, symbol, and decimals using optimized assembly calls
 4. The result is decoded in Python and returned as a list of dictionaries
 5. For async execution, multiple batches are processed concurrently using asyncio
+
+<details>
+  <summary>Diagram</summary>
+  
+  ```mermaid
+  graph TD
+      A["Pools"]:::python --> B{{"🔍 Validate<br> addresses"}}:::python
+      B -->|"✅"| C["📦 Batches"]:::python
+      B -->|"❌"| D["⚠ Log Warning"]:::python
+      C -->|"⚡ Concurrent"| EVM1
+      EVM1["🌐 RPC eth_call"]:::python
+      EVM1 -->|"batch"| F
+
+      subgraph EVM ["Node"]
+          F["📄 Deployless multicall <br>contract constructor"]:::python
+          G["Process Pool"]:::python
+          H{{" Has <br> token0/token1?"}}:::python
+          I["⚙ Assembly Calls"]:::python
+          J["🔄 Null Data"]:::python
+          K["Encode Metadata"]:::python
+          L["Return ABI Data"]:::python
+
+          %% Internal flow inside EVM subgraph
+          F -->|"loop"| G
+          G --> H
+          H -->|"✅ Yes (97.5%)"| I
+          H -->|"❌ ex Uniswap v4 (2.5%)"| J
+          I --> K
+          K --> L
+      end
+      L --> M
+      M["Decoder"]:::python
+      M --> N
+      N["Pool Objects"]:::python
+
+      %% Observed error paths from logs
+      EVM1 -.->|"404 Not Found"| D
+      I -.->|"ex Uniswap v4"| J
+
+      %% Class definitions for styling (minimalistic palette)
+      classDef python fill:#f5f5f5,stroke:#ccc,color:#333,stroke-width:1px;
+      classDef validation fill:#f5f5f5,stroke:#ccc,color:#333,stroke-width:1px;
+      classDef batch fill:#f5f5f5,stroke:#ccc,color:#333,stroke-width:1px;
+      classDef rpc fill:#f5f5f5,stroke:#ccc,color:#333,stroke-width:1px;
+      classDef contract fill:#f5f5f5,stroke:#ccc,color:#333,stroke-width:1px;
+      classDef assembly fill:#f5f5f5,stroke:#ccc,color:#333,stroke-width:1px;
+      classDef error fill:#ffcccc,stroke:#e57373,color:#333,stroke-width:1px;
+      classDef success fill:#ccffcc,stroke:#81c784,color:#333,stroke-width:1px;
+  ```
+</details>
+
+
 
 
 ## Performance
