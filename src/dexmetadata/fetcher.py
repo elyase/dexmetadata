@@ -9,9 +9,10 @@ contracts.
 import asyncio
 import logging
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from eth_abi import decode, encode
+from eth_typing import ChecksumAddress
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -22,10 +23,13 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from web3 import Web3
+from web3.contract import Contract
 from web3.main import AsyncWeb3
+from web3.types import BlockData, TxData
 
 from .bytecode import POOL_dexmetadata_BYTECODE
 from .decoder import POOL_METADATA_RESULT_TYPE
+from .models import Pool
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -43,7 +47,8 @@ def fetch(
     batch_size: int = 30,
     show_progress: bool = True,
     max_concurrent_batches: int = 25,
-) -> List[Dict[str, Any]]:
+    format: Literal["dict", "object"] = "object",
+) -> List[Union[Dict[str, Any], Pool]]:
     """
     Fetch metadata for DEX pools using deployless multicall with batching.
 
@@ -53,23 +58,11 @@ def fetch(
         network: Network name to use with Ankr's RPC if rpc_url is not provided
         batch_size: Maximum number of addresses to process in a single call
         show_progress: Whether to show a progress bar (default: True)
+        max_concurrent_batches: Maximum number of batches to process concurrently (default: 5)
+        format: Output format - either "dict" or "object" (default: "object")
 
     Returns:
-        List of dictionaries containing metadata for each pool:
-        [
-            {
-                'pool_address': '0x...',
-                'token0_address': '0x...',
-                'token0_name': 'Token A',
-                'token0_symbol': 'TKA',
-                'token0_decimals': 18,
-                'token1_address': '0x...',
-                'token1_name': 'Token B',
-                'token1_symbol': 'TKB',
-                'token1_decimals': 6,
-            },
-            ...
-        ]
+        List of pool metadata dictionaries or Pool objects
     """
     try:
         # Check if we're already in an event loop
@@ -87,6 +80,7 @@ def fetch(
                     batch_size=batch_size,
                     show_progress=show_progress,
                     max_concurrent_batches=max_concurrent_batches,
+                    format=format,
                 ),
             )
             return future.result()
@@ -100,6 +94,7 @@ def fetch(
                 batch_size=batch_size,
                 show_progress=show_progress,
                 max_concurrent_batches=max_concurrent_batches,
+                format=format,
             )
         )
 
@@ -111,7 +106,8 @@ async def fetch_async(
     batch_size: int,
     max_concurrent_batches: int,
     show_progress: bool,
-) -> List[Dict[str, Any]]:
+    format: Literal["dict", "object"] = "dict",
+) -> List[Union[Dict[str, Any], Pool]]:
     """
     Asynchronously fetch metadata for DEX pools using deployless multicall with batching.
 
@@ -122,9 +118,10 @@ async def fetch_async(
         batch_size: Maximum number of addresses to process in a single call (default: 120)
         max_concurrent_batches: Maximum number of batches to process concurrently (default: 5)
         show_progress: Whether to show a progress bar (default: True)
+        format: Output format - either "dict" or "object"
 
     Returns:
-        List of dictionaries containing metadata for each pool
+        List of pool metadata dictionaries or Pool objects
     """
     if rpc_url is None and network is not None:
         rpc_url = f"https://rpc.ankr.com/{network}"
@@ -268,6 +265,10 @@ async def fetch_async(
             console.print("[yellow]⚠[/yellow] No pool metadata found")
 
     logger.debug(f"Finished processing all batches. Total results: {len(all_results)}")
+
+    # Convert to Pool objects if requested
+    if format == "object":
+        return [Pool.from_dict(data) for data in all_results]
     return all_results
 
 

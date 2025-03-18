@@ -48,6 +48,7 @@ async def fetch_with_size(
                     batch_size=batch_size,
                     max_concurrent_batches=max_concurrent,
                     show_progress=not silent,
+                    format="dict",
                 ),
             )
         return result
