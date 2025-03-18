@@ -34,11 +34,11 @@ assert pools[0].token1.decimals == 8
 
 ## Features 🌟
 
-- No fancy setup (dbt pipelines / datalake infrastructure / customized nodes) needed, just plug in any standard RPC and you're good to go
-- Uses some clever EVM tricks (assembly optimized deployless multicall) to get the job done quickly and cheaply
-- Covers 95%+ of swaps out there without DEX-specific custom transform logic
+- No fancy setup ([dbt pipelines](https://github.com/duneanalytics/spellbook/tree/main/dbt_subprojects/dex/models/trades) / datalake infrastructure / customized nodes) needed, just plug in any standard RPC and you're good to go
+- Uses some clever EVM tricks (assembly optimized [deployless multicall](https://destiner.io/blog/post/deployless-multicall/)) to get the job done quickly and cheaply
+- Covers [95%+ of swaps out there](examples/coverage.py) without DEX-specific custom transform logic
 - Processes multiple pools at once to keep things fast and efficient
-- Handy tool to automatically find good settings for your RPC
+- [Handy tool](examples/optimize.py) to automatically find good settings for your RPC
 
 
 ## Installation 📥
@@ -50,7 +50,7 @@ $ uv add dexmetadata
 
 ## How It Works 🔍
 
-1. On each eth_call we "deploy" a [special contract](src/contracts/PoolMetadataFetcher.sol) using the [deployless multicall](https://destiner.io/blog/post/deployless-multicall/) trick 
+1. On each eth_call we "deploy" a [special contract](src/dexmetadata/contracts/PoolMetadataFetcher.sol) using the [deployless multicall](https://destiner.io/blog/post/deployless-multicall/) trick 
 2. Contract executes with a batch of pool addresses in the EVM and fetches both tokens in each pool
 3. Then for each token we get token name, symbol, and decimals using optimized assembly calls
 4. The result is decoded in Python and returned as a list of dictionaries
@@ -145,9 +145,11 @@ Build a cache for all pools and tokens metadata (ex [Dune spellbook](https://git
   * ✅ Simple implementation, no event scanning
   * ✅ Works on any EVM chain with basic RPC support
 
-## Next Steps
+## Roadmap
 
 - [ ] Support the remaining 5% of swaps
     - [ ] uniswap v4
     - [ ] balancer
     - [ ] Maverick
+
+- [ ] Cache with custom eviction policy
