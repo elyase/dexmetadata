@@ -34,7 +34,7 @@ assert pools[0].token1.decimals == 8
 
 ## Features 🌟
 
-- No fancy setup ([dbt pipelines](https://github.com/duneanalytics/spellbook/tree/main/dbt_subprojects/dex/models/trades) / datalake infrastructure / customized nodes) needed, just plug in any standard RPC and you're good to go
+- No fancy setup ([dbt pipelines](https://github.com/duneanalytics/spellbook/tree/main/dbt_subprojects/dex/models/trades) / datalake infrastructure / [customized nodes](https://github.com/shadow-hq/shadow-reth)) needed, just plug in any standard RPC and you're good to go
 - Uses some clever EVM tricks (assembly optimized [deployless multicall](https://destiner.io/blog/post/deployless-multicall/)) to get the job done quickly and cheaply
 - Covers [95%+ of swaps out there](examples/coverage.py) without DEX-specific custom transform logic
 - Processes multiple pools at once to keep things fast and efficient
@@ -126,30 +126,96 @@ In real-world testing, the fetch script processed 1000 pools in ~6s (~160 pools/
 
 The default parameters (`batch_size=30`, `max_concurrent_batches=25`) are optimized for publicnodes.com RPC endpoints and deliver good performance while staying within rate limits.
 
-## Alternative Approaches
+## Overview of pool metadata retrieval methods
 
-In the end it's all about deciding the main trade offs regarding where and when to process the data, at a node, off-chain in a data lake, on the client, during the query or in advance, etc ...
+### Metadata origin
 
-### Event cache
-Build a cache for all pools and tokens metadata (ex [Dune spellbook](https://github.com/duneanalytics/spellbook/tree/main/dbt_subprojects/dex/models/trades))
+DEX **pool metadata** (token addresses) can be retrieved from:
 
-  * ❌ Requires custom decoding logic for each DEX
-  * ❌ Needs historical data access
-  * ❌ Need to maintain potentially large metadata cache
-  * ❌ Inneficient processing of large numbers of pools / block ranges that wont be queried
-  * ✅ Fast offchain lookups once cached
+- **Event Logs** (ex `PairCreated`/`PoolCreated` events)
+- **Contract Storage** (ex accessed via `.token0()` / `.token1()`)
+- **Transaction input data:** (ex `createPair/createPool` tx calldata)
 
-### Naive web3.py
-  * ❌ Requires ABI setup for each DEX
-  * ❌ Slow for large numbers of pools (1 RPC call per operation)
-  * ✅ Simple implementation, no event scanning
-  * ✅ Works on any EVM chain with basic RPC support
+**ERC20 metadata** is stored in **Contract Storage** and can be accessed via the corresponding view functions (`.name()`, `.symbol()`, `.decimals()`)
+
+### Methods to access pool and ERC20 metadata:
+
+- Direct node access (ex reth execution extensions or direct db access)
+- RPC calls
+- Pre-indexed raw tables (e.g., envio.dev, sqd.ai)
+
+### Processing
+
+We also need processing for:
+
+- Filtering
+- Decoding logs
+- Combining pool and ERC20 metadata
+- Caching
+
+Processing can be performed on-node, off-chain, or hybrid, creating several dimensions in the **solution space**, in summary:
+
+- **Data Origin**: Raw Logs, Transaction Inputs, Contract State
+-  **Access Method**: Direct Node, RPC, Indexer
+- **Processing Location**: On-Node, Off-Chain, Hybrid
+
+### Solution space
+
+| **solution**       | **Processing** | **Origin**     | **Access Method** |
+| ------------------ | --------------- | -------------- | ----------------- |
+| **subgraphs**      | Off-Chain       | Raw Logs       | RPC               |
+| **dune spellbook** | Off-Chain       | Raw Logs       | Indexer           |
+| **shadow-reth**    | On-Node         | Contract State | Direct Node       |
+| **ponder**         | Off-Chain       | Hybrid         | RPC               |
+
+Each example approach has a unique complexity, storage, latency profile. Relevant metrics include:
+
+- **DEX Coverage**: Effort needed to add new DEXes
+- **Backfill Speed**: Performance of processing a large number of pools
+- **Storage**: Ex space required for indexed data
+- **Latency**: Delay from transaction inclusion to data availability
+- **Cold Start**: Time needed to start serving requests
+- **Complexity**: Implementation and maintenance effort
+- **Cost**: Operational expenses
+
+This table provides a view on how these approaches compare with each other (higher = better). The scores reflect subjective estimates of each methodology in the context of the task of fetching metadata for a specific set of pools (rather than the actual products themselves)
+
+
+| **Solution**       | **Backfilling speed** | **Storage** | **Latency** | **Cold start** | **Cost** |
+| ------------------ | --------------------- | ----------- | ----------- | -------------- | -------- |
+| **subgraphs**      | 1                     | 3           | 3           | 1              | 3        |
+| **dune spellbook** | 5                     | 1           | 1           | 2              | 1        |
+| **shadow-reth**    | 4                     | 3           | 5           | 3              | 1        |
+| **ponder**         | 2                     | 3           | 3           | 2              | 3        |
+| dexmetadata        | 3                     | 5           | 3           | 5              | 5        |
+
+
+### This library's approach
+
+- **Metadata Origin:** Contract State
+- **Access Method:** RPC
+- **Processing:** mostly on-node with the deployless multicall contract
+
+**Pros:**
+
+- Minimal setup: just a Python library and standard RPC
+- Strong DEX coverage (over 95%) without the need for custom logic for each individual DEX
+- Storage efficient: eliminates the requirement for maintaining large historical tables for every pool and token, which users are unlikely to query
+- More performant than solutions that process events one at a time
+
+**Cons**
+
+- Backfills (more precisely large number of pools) can be slower compared to using event logs and indexers, as it does not take advantage of pre-indexed data, also off-chain processing scales better than on-node solutions
+- Slightly higher latency in comparison to direct node access methods
 
 ## Roadmap
 
-- [ ] Support the remaining 5% of swaps
+- [ ] DEX support
     - [ ] uniswap v4
     - [ ] balancer
     - [ ] Maverick
-
-- [ ] Cache with custom eviction policy
+- [ ] Cache with smart eviction policy
+- [ ] erpc integration
+- [ ] CLI interface
+- [ ] benchmarks
+- [ ] alternative method to leverage indexed data and off-chain processing for requests involving a higher number of pools
