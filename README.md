@@ -2,7 +2,7 @@
 
 Python library for fetching metadata from DEX pools
 
-![](demo.gif)
+![](assets/demo.gif)
 
 ## Usage 🚀
 
@@ -178,17 +178,10 @@ Each example approach has a unique complexity, storage, latency profile. Relevan
 - **Complexity**: Implementation and maintenance effort
 - **Cost**: Operational expenses
 
-This table provides a view on how these approaches compare with each other (higher = better). The scores reflect subjective estimates of each methodology in the context of the task of fetching metadata for a specific set of pools (rather than the actual products themselves)
+This chart provides a view on how these approaches compare with each other (higher = better). The scores reflect subjective estimates of each methodology in the context of the task of fetching metadata for a specific set of pools (rather than the actual products themselves)
 
 
-| **Solution**       | **Backfilling speed** | **Storage** | **Latency** | **Cold start** | **Cost** |
-| ------------------ | --------------------- | ----------- | ----------- | -------------- | -------- |
-| **subgraphs**      | 1                     | 3           | 3           | 1              | 3        |
-| **dune spellbook** | 5                     | 1           | 1           | 2              | 1        |
-| **shadow-reth**    | 4                     | 3           | 5           | 3              | 1        |
-| **ponder**         | 2                     | 3           | 3           | 2              | 3        |
-| dexmetadata        | 3                     | 5           | 3           | 5              | 5        |
-
+![chart](assets/chart.svg)
 
 ### This library's approach
 

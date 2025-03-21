@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 22.987 500.002 444.498" width="500.002px" height="444.498px">
+  <rect width="500.002" height="444.498" style="stroke: rgb(0, 0, 0); fill: rgb(255, 255, 255); stroke-width: 0px;" y="22.987" transform="matrix(0.9999999999999999, 0, 0, 0.9999999999999999, -1.4210854715202004e-14, 0)"/>
+  <g id="starChart" style="" transform="matrix(0.8337360620498656, 0, 0, 0.8337360620498656, 61.76419830322264, 45.48709869384763)">
+    <g transform="matrix(1, 0, 0, 1, 217.557, 212.849)">
+      <line x1="0" y1="0" x2="1.1021821192326179e-14" y2="-180" class="axis"/>
+      <line x1="0" y1="0" x2="171.19017293312763" y2="-55.62305898749053" class="axis"/>
+      <line x1="0" y1="0" x2="105.80134541264516" y2="145.62305898749054" class="axis"/>
+      <line x1="0" y1="0" x2="-105.80134541264515" y2="145.62305898749054" class="axis"/>
+      <line x1="0" y1="0" x2="-171.19017293312766" y2="-55.62305898749051" class="axis"/>
+      <circle cx="0" cy="0" r="36" stroke="#e5e7eb" stroke-width="1px" fill="none"/>
+      <circle cx="0" cy="0" r="72" stroke="#e5e7eb" stroke-width="1px" fill="none"/>
+      <circle cx="0" cy="0" r="108" stroke="#e5e7eb" stroke-width="1px" fill="none"/>
+      <circle cx="0" cy="0" r="144" stroke="#e5e7eb" stroke-width="1px" fill="none"/>
+      <circle cx="0" cy="0" r="180" stroke="#e5e7eb" stroke-width="1px" fill="none"/>
+      <text class="axis-label" x="1.2124003311558799e-14" y="-198.00000000000003" style="text-anchor: start; font-size: 14px; white-space: pre;">Backfilling speed</text>
+      <text class="axis-label" x="188.30919022644042" y="-61.18536488623959" style="text-anchor: start; font-size: 14px; white-space: pre;">Storage</text>
+      <text class="axis-label" x="116.3814799539097" y="160.18536488623963" style="text-anchor: start; font-size: 14px; white-space: pre;">Latency</text>
+      <text class="axis-label" x="-116.38147995390968" y="160.18536488623963" style="text-anchor: end; font-size: 14px; white-space: pre;">Cold start</text>
+      <text class="axis-label" x="-188.30919022644045" y="-61.18536488623957" style="text-anchor: end; font-size: 14px; white-space: pre;">Cost</text>
+      <path class="radar-line" d="M0,-36L102.714,-33.374L63.481,87.374L-21.16,29.125L-102.714,-33.374Z" style="stroke: rgb(233, 30, 99); fill: rgb(233, 30, 99); fill-opacity: 0.3; opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba23330991" cx="2.204364238465236e-15" cy="-36" r="5" style="fill: rgb(233, 30, 99); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba23330991" cx="102.71410375987658" cy="-33.37383539249432" r="5" style="fill: rgb(233, 30, 99); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba23330991" cx="63.4808072475871" cy="87.37383539249433" r="5" style="fill: rgb(233, 30, 99); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba23330991" cx="-21.16026908252903" cy="29.12461179749811" r="5" style="fill: rgb(233, 30, 99); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba23330991" cx="-102.7141037598766" cy="-33.37383539249431" r="5" style="fill: rgb(233, 30, 99); opacity: 0.8;"/>
+      <path class="radar-line" d="M0,-180L34.238,-11.125L21.16,29.125L-42.321,58.249L-34.238,-11.125Z" style="stroke: rgb(56, 142, 249); fill: rgb(56, 142, 249); fill-opacity: 0.3; opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba561422491" cx="1.1021821192326179e-14" cy="-180" r="5" style="fill: rgb(56, 142, 249); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba561422491" cx="34.238034586625524" cy="-11.124611797498106" r="5" style="fill: rgb(56, 142, 249); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba561422491" cx="21.160269082529034" cy="29.12461179749811" r="5" style="fill: rgb(56, 142, 249); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba561422491" cx="-42.32053816505806" cy="58.24922359499622" r="5" style="fill: rgb(56, 142, 249); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba561422491" cx="-34.23803458662553" cy="-11.124611797498103" r="5" style="fill: rgb(56, 142, 249); opacity: 0.8;"/>
+      <path class="radar-line" d="M0,-144L102.714,-33.374L105.801,145.623L-63.481,87.374L-34.238,-11.125Z" style="stroke: rgb(255, 235, 59); fill: rgb(255, 235, 59); fill-opacity: 0.3; opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba255235591" cx="8.817456953860943e-15" cy="-144" r="5" style="fill: rgb(255, 235, 59); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba255235591" cx="102.71410375987658" cy="-33.37383539249432" r="5" style="fill: rgb(255, 235, 59); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba255235591" cx="105.80134541264516" cy="145.62305898749054" r="5" style="fill: rgb(255, 235, 59); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba255235591" cx="-63.48080724758709" cy="87.37383539249433" r="5" style="fill: rgb(255, 235, 59); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba255235591" cx="-34.23803458662553" cy="-11.124611797498103" r="5" style="fill: rgb(255, 235, 59); opacity: 0.8;"/>
+      <path class="radar-line" d="M0,-72L102.714,-33.374L63.481,87.374L-42.321,58.249L-102.714,-33.374Z" style="stroke: rgb(102, 187, 106); fill: rgb(102, 187, 106); fill-opacity: 0.3; opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba1021871061" cx="4.408728476930472e-15" cy="-72" r="5" style="fill: rgb(102, 187, 106); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba1021871061" cx="102.71410375987658" cy="-33.37383539249432" r="5" style="fill: rgb(102, 187, 106); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba1021871061" cx="63.4808072475871" cy="87.37383539249433" r="5" style="fill: rgb(102, 187, 106); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba1021871061" cx="-42.32053816505806" cy="58.24922359499622" r="5" style="fill: rgb(102, 187, 106); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba1021871061" cx="-102.7141037598766" cy="-33.37383539249431" r="5" style="fill: rgb(102, 187, 106); opacity: 0.8;"/>
+      <path class="radar-line" d="M0,-108L171.19,-55.623L63.481,87.374L-105.801,145.623L-171.19,-55.623Z" style="stroke: rgb(126, 87, 194); fill: rgb(126, 87, 194); fill-opacity: 0.3; opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba126871941" cx="6.6130927153957075e-15" cy="-108" r="5" style="fill: rgb(126, 87, 194); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba126871941" cx="171.19017293312763" cy="-55.62305898749053" r="5" style="fill: rgb(126, 87, 194); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba126871941" cx="63.4808072475871" cy="87.37383539249433" r="5" style="fill: rgb(126, 87, 194); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba126871941" cx="-105.80134541264515" cy="145.62305898749054" r="5" style="fill: rgb(126, 87, 194); opacity: 0.8;"/>
+      <circle class="radar-point radar-point-rgba126871941" cx="-171.19017293312766" cy="-55.62305898749051" r="5" style="fill: rgb(126, 87, 194); opacity: 0.8;"/>
+    </g>
+    <g class="legend" transform="matrix(1, 0, 0, 1, -44.4621, 460.896)">
+      <g class="legend-item" transform="matrix(1, 0, 0, 1, 119.226, 1.50088)">
+        <rect x="0" y="0" width="12" height="12" style="fill: rgb(233, 30, 99);"/>
+        <text x="20" y="10" style="alignment-baseline: middle; font-size: 14px; white-space: pre;">subgraphs</text>
+      </g>
+      <g class="legend-item" transform="matrix(1, 0, 0, 1, 309.24, 1.50088)">
+        <rect x="0" y="0" width="12" height="12" style="fill: rgb(56, 142, 249);"/>
+        <text x="20" y="10" style="alignment-baseline: middle; font-size: 14px; white-space: pre;">dune spellbook</text>
+      </g>
+      <g class="legend-item" transform="matrix(1, 0, 0, 1, 443.941, 1.50088)">
+        <rect x="0" y="0" width="12" height="12" style="fill: rgb(255, 235, 59);"/>
+        <text x="20" y="10" style="alignment-baseline: middle; font-size: 14px; white-space: pre;">shadow-reth</text>
+      </g>
+      <g class="legend-item" transform="matrix(1, 0, 0, 1, 225.125, 1.50088)">
+        <rect x="0" y="0" width="12" height="12" style="fill: rgb(102, 187, 106);"/>
+        <text x="20" y="10" style="alignment-baseline: middle; font-size: 14px; white-space: pre;">ponder</text>
+      </g>
+      <g class="legend-item" transform="matrix(1, 0, 0, 1, -2.23491, 1.50088)">
+        <rect x="0" y="0" width="12" height="12" style="fill: rgb(126, 87, 194);"/>
+        <text x="20" y="10" style="alignment-baseline: middle; font-size: 14px; white-space: pre;">dexmetadata</text>
+      </g>
+    </g>
+  </g>
+</svg>
