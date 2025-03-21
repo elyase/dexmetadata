@@ -111,20 +111,21 @@ $ uv add dexmetadata
 
 ## Performance
 
-The parameter optimizer finds good settings for your RPC provider:
+Using a provider like Alchemy you can reach around 2000 pools/s of throughput (`batch_size=30`, `max_concurrent_batches=200`), own node can go way higher. At 2000 pools/s you can retrieve metadata for all Ethereum pools active in the past year in ~1 minute.
+
+The parameter optimizer finds good settings for your RPC provider if you know the rate limit of your provider:
+
 ```bash
 $ uv run examples/optimize.py --rpm 1800 --rpc https://base-rpc.publicnode.com
 
 Measuring response time with optimal batch size...
-Average response time: 2.51s
 
 Optimal parameters:
   batch_size: 30
   max_concurrent_batches: 25
 ```
-In real-world testing, the fetch script processed 1000 pools in ~6s (~160 pools/s).
 
-The default parameters (`batch_size=30`, `max_concurrent_batches=25`) are optimized for publicnodes.com RPC endpoints and deliver good performance while staying within rate limits.
+The default parameters are optimized for publicnodes.com RPC endpoints while staying within rate limits.
 
 ## Overview of pool metadata retrieval methods
 

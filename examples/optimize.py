@@ -19,6 +19,7 @@ null_output = StringIO()
 # ANSI color codes (with bold)
 RED = "\033[1;38;5;203m"
 GREEN = "\033[1;38;5;118m"
+YELLOW = "\033[1;38;5;220m"
 RESET = "\033[0m"
 
 # Test pool addresses
@@ -27,7 +28,7 @@ KNOWN_POOLS = [
     "0xfBB6Eed8e7aa03B138556eeDaF5D271A5E1e43ef",  # USDC/cbBTC
     "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",  # USDC/AERO
     "0x323b43332F97B1852D8567a08B1E8ed67d25A8d5",  # WETH/msETH
-] * 100
+] * 20000
 
 
 async def fetch_with_size(
@@ -115,8 +116,77 @@ def calculate_concurrency(rate_limit, avg_response_time, is_per_second=False):
     # Convert to requests per minute if needed and apply safety margin (85%)
     rpm = (rate_limit * 60 if is_per_second else rate_limit) * 0.85
 
-    # Calculate max concurrent batches and cap at reasonable limits
-    return min(max(1, int((rpm * avg_response_time) / 60)), 25)
+    # Calculate concurrency based on rate limit and response time
+    # If user specified their own rate limit, trust it (might be their own node)
+    return max(1, int((rpm * avg_response_time) / 60))
+
+
+async def verify_parameters(rpc_url, batch_size, max_concurrent):
+    """Verify the calculated parameters with a larger test set."""
+    print("\nVerifying parameters with a larger test set...")
+
+    # Use enough pools to test full concurrency (at least batch_size * max_concurrent)
+    needed_pools = batch_size * max(3, max_concurrent)
+    available_pools = len(KNOWN_POOLS)
+
+    # Check if we're limited by available test pools
+    if needed_pools > available_pools:
+        print(
+            f"{YELLOW}Warning: Limited by available test pools. Need {needed_pools} but only have {available_pools}.{RESET}"
+        )
+        print(
+            f"{YELLOW}Results may not fully reflect performance at this concurrency level.{RESET}"
+        )
+
+    test_pools = KNOWN_POOLS[: min(needed_pools, available_pools)]
+    start_time = time.time()
+
+    result = await fetch_with_size(
+        rpc_url, test_pools, batch_size, max_concurrent=max_concurrent, silent=False
+    )
+
+    duration = time.time() - start_time
+    total_pools = len(test_pools)
+    successful_pools = len([p for p in result if p.get("token0_name")])
+    success_rate = successful_pools / total_pools
+
+    # Calculate throughput (pools per second)
+    throughput = successful_pools / duration if duration > 0 else 0
+    # Calculate time per pool in milliseconds for better readability
+    ms_per_pool = (duration / successful_pools) * 1000 if successful_pools > 0 else 0
+
+    print(f"\nVerification Results:")
+    print(f"Total pools tested: {total_pools}")
+    print(f"Successfully fetched: {successful_pools}")
+    print(f"Success rate: {success_rate:.1%}")
+    print(f"Total time: {duration:.2f}s")
+    print(f"Average time per pool: {ms_per_pool:.2f} ms")
+    print(f"Throughput: {throughput:.1f} pools/second")
+    print(f"Concurrent batches used: {max_concurrent}")
+
+    # Calculate estimated throughput for ideal conditions
+    # (if we could fully utilize all concurrent batches)
+    if max_concurrent > total_pools / batch_size:
+        ideal_concurrent = total_pools / batch_size
+        ideal_throughput = (
+            throughput * (max_concurrent / ideal_concurrent)
+            if ideal_concurrent > 0
+            else 0
+        )
+        print(
+            f"Estimated throughput with full concurrency: {ideal_throughput:.1f} pools/second"
+        )
+
+    # Only suggest reducing concurrency if success rate is too low
+    # We don't try increasing it to avoid exhausting RPC quotas
+    if success_rate < 0.9:  # Less than 90% success rate
+        suggested_concurrent = max(1, max_concurrent - 2)
+        print(
+            f"\n{RED}Warning: Success rate is low ({success_rate:.1%}). Consider reducing max_concurrent_batches to {suggested_concurrent}{RESET}"
+        )
+        return suggested_concurrent
+
+    return max_concurrent
 
 
 async def main():
@@ -130,12 +200,28 @@ async def main():
     parser.add_argument(
         "--batch-size", type=int, help="Specify a batch size instead of testing"
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        help="Force specific concurrency value (override calculated value)",
+    )
     args = parser.parse_args()
 
     # Process arguments
-    rpc_url = args.rpc or f"https://rpc.ankr.com/{args.network}"
+    rpc_url = args.rpc or "https://base-rpc.publicnode.com"
     rate_limit = args.rpm if args.rpm else (args.rps if args.rps else None)
     is_per_second = bool(args.rps)
+
+    if not rate_limit and not args.concurrency:
+        print(
+            f"{YELLOW}Warning: No rate limit (--rpm or --rps) specified. Using conservative default concurrency.{RESET}"
+        )
+        print(
+            f"{YELLOW}Specify --rpm or --rps for more accurate results based on your provider's limits.{RESET}"
+        )
+        print(
+            f"{YELLOW}Or use --concurrency to force a specific concurrency value.{RESET}"
+        )
 
     # Step 1: Determine maximum batch size
     max_batch_size = args.batch_size or await find_max_batch_size(rpc_url)
@@ -144,14 +230,27 @@ async def main():
     else:
         print(f"Maximum working batch size: {max_batch_size}")
 
-    # Step 2: Measure response time and calculate concurrency
+    # Step 2: Measure response time and calculate initial concurrency
     avg_response_time = await measure_response_time(rpc_url, max_batch_size)
-    max_concurrent = calculate_concurrency(rate_limit, avg_response_time, is_per_second)
 
-    # Step 3: Output results
-    print("\nOptimal parameters:")
+    # Use manually specified concurrency if provided
+    if args.concurrency:
+        initial_concurrent = args.concurrency
+        print(f"Using manually specified concurrency: {initial_concurrent}")
+    else:
+        initial_concurrent = calculate_concurrency(
+            rate_limit, avg_response_time, is_per_second
+        )
+
+    # Step 3: Verify parameters with real test
+    final_concurrent = await verify_parameters(
+        rpc_url, max_batch_size, initial_concurrent
+    )
+
+    # Step 4: Output final results
+    print("\nFinal optimal parameters:")
     print(f"  batch_size: {max_batch_size}")
-    print(f"  max_concurrent_batches: {max_concurrent}")
+    print(f"  max_concurrent_batches: {final_concurrent}")
 
 
 if __name__ == "__main__":
