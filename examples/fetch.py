@@ -11,7 +11,6 @@ POOL_ADDRESSES = [
     "0x31f609019d0CC0b8cC865656142d6FeD69853689",  # POPCAT/WETH on uniswap v2
     "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",  # AERO/USDC on Aerodrome
     "0x323b43332F97B1852D8567a08B1E8ed67d25A8d5",  # msETH/WETH on Pancake Swap
-    "0x7ff277cb83ca0cafed8008bbde1cb8101f49a4dd",  # base uniswap v2 problematic pool
 ]
 
 
@@ -30,7 +29,7 @@ def main():
     assert pools[0].token1.address == "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf"
     assert pools[0].token1.decimals == 8
 
-    print(str(pools[4]))
+    print(pools[0])
     # USDC/cbBTC (0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef)
     # ├─ USD Coin
     # │    ├ USDC
