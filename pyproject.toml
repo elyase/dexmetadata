@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dexmetadata = "dexmetadata.cli:main"
+dex = "dexmetadata.cli:main"
 
 [build-system]
 requires = ["hatchling"]

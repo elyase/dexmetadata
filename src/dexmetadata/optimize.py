@@ -1,14 +1,14 @@
-#!/usr/bin/env python
 """
 Find optimal parameters for fetching pool metadata based on your RPC connection.
 """
 
-import argparse
 import asyncio
 import logging
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
+from typing import Optional
 
 from dexmetadata import fetch
 
@@ -32,8 +32,12 @@ KNOWN_POOLS = [
 
 
 async def fetch_with_size(
-    rpc_url, pool_addresses, batch_size, max_concurrent=1, silent=True
-):
+    rpc_url: str,
+    pool_addresses: list[str],
+    batch_size: int,
+    max_concurrent: int = 1,
+    silent: bool = True,
+) -> list:
     """Wrapper for fetch that handles async and output suppression."""
     try:
         with (
@@ -50,6 +54,7 @@ async def fetch_with_size(
                     max_concurrent_batches=max_concurrent,
                     show_progress=not silent,
                     format="dict",
+                    use_cache=False,
                 ),
             )
         return result
@@ -59,7 +64,7 @@ async def fetch_with_size(
         return []
 
 
-async def find_max_batch_size(rpc_url):
+async def find_max_batch_size(rpc_url: str) -> int:
     """Find the maximum batch size that works for this RPC provider."""
     print("\nFinding maximum batch size...")
     print("Testing sizes: ", end="", flush=True)
@@ -89,7 +94,7 @@ async def find_max_batch_size(rpc_url):
     return 4  # Fallback
 
 
-async def measure_response_time(rpc_url, batch_size):
+async def measure_response_time(rpc_url: str, batch_size: int) -> float:
     """Measure response time using the determined batch size."""
     print("\nMeasuring response time with optimal batch size...")
 
@@ -108,7 +113,9 @@ async def measure_response_time(rpc_url, batch_size):
         return 0.7
 
 
-def calculate_concurrency(rate_limit, avg_response_time, is_per_second=False):
+def calculate_concurrency(
+    rate_limit: Optional[float], avg_response_time: float, is_per_second: bool = False
+) -> int:
     """Calculate optimal concurrency based on rate limit."""
     if not rate_limit:
         return 2  # Default concurrency
@@ -121,7 +128,7 @@ def calculate_concurrency(rate_limit, avg_response_time, is_per_second=False):
     return max(1, int((rpm * avg_response_time) / 60))
 
 
-async def verify_parameters(rpc_url, batch_size, max_concurrent):
+async def verify_parameters(rpc_url: str, batch_size: int, max_concurrent: int) -> int:
     """Verify the calculated parameters with a larger test set."""
     print("\nVerifying parameters with a larger test set...")
 
@@ -189,43 +196,40 @@ async def verify_parameters(rpc_url, batch_size, max_concurrent):
     return max_concurrent
 
 
-async def main():
-    parser = argparse.ArgumentParser(
-        description="Find optimal parameters for fetching pool metadata"
-    )
-    parser.add_argument("--rpc", type=str, help="RPC URL")
-    parser.add_argument("--network", type=str, default="base", help="Network name")
-    parser.add_argument("--rpm", type=float, help="Rate limit in requests per minute")
-    parser.add_argument("--rps", type=float, help="Rate limit in requests per second")
-    parser.add_argument(
-        "--batch-size", type=int, help="Specify a batch size instead of testing"
-    )
-    parser.add_argument(
-        "--concurrency",
-        type=int,
-        help="Force specific concurrency value (override calculated value)",
-    )
-    args = parser.parse_args()
+async def optimize(
+    rpc_url: str,
+    rate_limit: Optional[float] = None,
+    is_per_second: bool = False,
+    batch_size: Optional[int] = None,
+    concurrency: Optional[int] = None,
+) -> tuple[int, int]:
+    """
+    Find optimal parameters for fetching pool metadata.
 
-    # Process arguments
-    rpc_url = args.rpc or "https://base-rpc.publicnode.com"
-    rate_limit = args.rpm if args.rpm else (args.rps if args.rps else None)
-    is_per_second = bool(args.rps)
+    Args:
+        rpc_url: RPC URL to test
+        rate_limit: Rate limit in requests per minute or second
+        is_per_second: Whether rate_limit is in requests per second
+        batch_size: Optional fixed batch size to use
+        concurrency: Optional fixed concurrency to use
 
-    if not rate_limit and not args.concurrency:
+    Returns:
+        Tuple of (batch_size, max_concurrent_batches)
+    """
+    if not rate_limit and not concurrency:
         print(
-            f"{YELLOW}Warning: No rate limit (--rpm or --rps) specified. Using conservative default concurrency.{RESET}"
+            f"{YELLOW}Warning: No rate limit specified. Using conservative default concurrency.{RESET}"
         )
         print(
-            f"{YELLOW}Specify --rpm or --rps for more accurate results based on your provider's limits.{RESET}"
+            f"{YELLOW}Specify rate limit for more accurate results based on your provider's limits.{RESET}"
         )
         print(
-            f"{YELLOW}Or use --concurrency to force a specific concurrency value.{RESET}"
+            f"{YELLOW}Or use concurrency to force a specific concurrency value.{RESET}"
         )
 
     # Step 1: Determine maximum batch size
-    max_batch_size = args.batch_size or await find_max_batch_size(rpc_url)
-    if args.batch_size:
+    max_batch_size = batch_size or await find_max_batch_size(rpc_url)
+    if batch_size:
         print(f"Using batch size: {max_batch_size}")
     else:
         print(f"Maximum working batch size: {max_batch_size}")
@@ -234,8 +238,8 @@ async def main():
     avg_response_time = await measure_response_time(rpc_url, max_batch_size)
 
     # Use manually specified concurrency if provided
-    if args.concurrency:
-        initial_concurrent = args.concurrency
+    if concurrency:
+        initial_concurrent = concurrency
         print(f"Using manually specified concurrency: {initial_concurrent}")
     else:
         initial_concurrent = calculate_concurrency(
@@ -252,6 +256,4 @@ async def main():
     print(f"  batch_size: {max_batch_size}")
     print(f"  max_concurrent_batches: {final_concurrent}")
 
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    return max_batch_size, final_concurrent

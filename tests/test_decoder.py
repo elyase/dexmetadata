@@ -1,8 +1,6 @@
-from unittest.mock import patch
-
-import pytest
-from dexmetadata.decoder import decode_metadata_response
 from eth_abi import encode
+
+from dexmetadata.decoder import decode_metadata_response
 
 
 def test_decode_metadata_response_empty():

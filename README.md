@@ -1,10 +1,37 @@
-# DexMetadata 🦄 
+<h1>
+<p align="center">
+  <br>DexMetadata 🦄 
+</p >
+</h1>
 
+<p align="center">
 Python library for fetching metadata from DEX pools
+</p>
+
+<div align="center">
+  <a href="#usage">Usage</a> •
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#how-it-works">How It Works</a> •
+  <a href="#performance">Performance</a> •
+  <a href="#overview">Metadata Retrieval Methods</a> •
+  <a href="#caching">Caching</a> •
+  <a href="#cli-options">CLI Options</a>
+</div>
+
+<p align="center">
+  <a href="https://pypi.org/project/dexmetadata">
+    <img src="https://img.shields.io/pypi/v/dexmetadata.svg?label=pypi&logo=PyPI&logoColor=white" alt="PyPI">
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
+  </a>
+</p>
+
 
 ![](assets/demo.gif)
 
-## Usage 🚀
+<h2 id="usage">Usage 🚀</h2>
 
 ```python
 from dexmetadata import fetch
@@ -31,24 +58,37 @@ assert pools[0].token1.symbol == 'cbBTC'
 assert pools[0].token1.address == '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf'
 assert pools[0].token1.decimals == 8
 ```
+**CLI:**
+```bash
+# Fetch
+dex fetch 0xfBB6Eed8e7aa03B138556eeDaF5D271A5E1e43ef --network base
 
-## Features 🌟
+# Cache
+dex cache-info
+dex cache-clear
+
+# Optimize
+dex optimize --rpm 1800 --rpc https://base-rpc.publicnode.com
+```
+
+<h2 id="features">Features 🌟</h2>
 
 - No fancy setup ([dbt pipelines](https://github.com/duneanalytics/spellbook/tree/main/dbt_subprojects/dex/models/trades) / datalake infrastructure / [customized nodes](https://github.com/shadow-hq/shadow-reth)) needed, just plug in any standard RPC and you're good to go
 - Uses some clever EVM tricks (assembly optimized [deployless multicall](https://destiner.io/blog/post/deployless-multicall/)) to get the job done quickly and cheaply
 - Covers [95%+ of swaps out there](examples/coverage.py) without DEX-specific custom transform logic
 - Processes multiple pools at once to keep things fast and efficient
 - [Handy tool](examples/optimize.py) to automatically find good settings for your RPC
+- Persistent caching with hybrid LRU/LFU eviction policy for frequently queried pools
+- Python and CLI interface
 
 
-## Installation 📥
+<h2 id="installation">Installation 📥</h2>
 
 ```bash
 $ uv add dexmetadata
 ```
 
-
-## How It Works 🔍
+<h2 id="how-it-works">How It Works 🔍</h2>
 
 1. On each eth_call we "deploy" a [special contract](src/dexmetadata/contracts/PoolMetadataFetcher.sol) using the [deployless multicall](https://destiner.io/blog/post/deployless-multicall/) trick 
 2. Contract executes with a batch of pool addresses in the EVM and fetches both tokens in each pool
@@ -57,7 +97,7 @@ $ uv add dexmetadata
 5. For async execution, multiple batches are processed concurrently using asyncio
 
 <details>
-  <summary>Diagram</summary>
+  <summary>Visual summary of the flow</summary>
   
   ```mermaid
   graph TD
@@ -109,25 +149,86 @@ $ uv add dexmetadata
 
 
 
-## Performance
+<h2 id="performance">Performance ⚡️</h2>
 
 Using a provider like Alchemy you can reach around 2000 pools/s of throughput (`batch_size=30`, `max_concurrent_batches=200`), own node can go way higher. At 2000 pools/s you can retrieve metadata for all Ethereum pools active in the past year in ~1 minute.
 
-The parameter optimizer finds good settings for your RPC provider if you know the rate limit of your provider:
+<h2 id="caching">Caching 📦</h2>
 
-```bash
-$ uv run examples/optimize.py --rpm 1800 --rpc https://base-rpc.publicnode.com
+DexMetadata includes a smart caching system to avoid redundant RPC calls when the same pools are requested multiple times:
 
-Measuring response time with optimal batch size...
+```python
+# Enable caching with default settings
+pools = fetch(
+    POOL_ADDRESSES, 
+    rpc_url="https://base-rpc.publicnode.com",
+    use_cache=True,  # Enabled by default
+)
 
-Optimal parameters:
-  batch_size: 30
-  max_concurrent_batches: 25
+# Configure cache size by number of pools
+pools = fetch(
+    POOL_ADDRESSES, 
+    rpc_url="https://base-rpc.publicnode.com",
+    cache_max_pools=10000,  # Default: 10,000 pools
+)
+
+# Or configure cache size by memory usage
+pools = fetch(
+    POOL_ADDRESSES,
+    rpc_url="https://base-rpc.publicnode.com", 
+    cache_max_size_mb=100,  # Override cache_max_pools
+)
+
+# Enable cache persistence between runs
+pools = fetch(
+    POOL_ADDRESSES,
+    rpc_url="https://base-rpc.publicnode.com",
+    cache_persist=True,  # Default: False
+)
 ```
 
-The default parameters are optimized for publicnodes.com RPC endpoints while staying within rate limits.
+The cache uses a hybrid LRU/LFU (Least Recently Used/Least Frequently Used) eviction policy to intelligently manage cached data. This ensures that both frequently accessed pools and recently accessed pools are prioritized in the cache.
 
-## Overview of pool metadata retrieval methods
+See the [cached fetch example](examples/cached_fetch.py) for more details on how to use the cache effectively.
+
+<h2 id="cli-options">CLI Options 💻</h2>
+
+- `fetch`: Retrieve pool metadata
+  - `--network`: Blockchain network (default: base)
+  - `--rpc-url`: Custom RPC URL
+  - `--output`, `-o`: Output file path (format auto-detected from extension: .json, .csv)
+  - `--format`: Override auto-detected output format (text, json, csv)
+  - `--batch-size`: Number of pools to fetch in a single batch (default: 30)
+  - `--max-concurrent-batches`: Maximum number of concurrent batch requests (default: 25)
+  - `--no-progress`: Disable progress bar
+  - Cache options:
+    - `--no-cache`: Disable caching
+    - `--cache-persist`: Enable cache persistence to disk
+    - `--cache-max-pools`: Maximum number of pools to cache (default: 10000)
+
+- `cache-info`: Display cache statistics
+  - Shows cache directory, database size, number of entries, usage percentage
+  - Lists most frequently accessed pools
+
+- `cache-clear`: Clear the cache entirely
+
+- `optimize`: Find optimal parameters for fetching pool metadata
+  - `--rpc-url`: RPC URL to test (default: https://base-rpc.publicnode.com)
+  - `--rpm`: Rate limit in requests per minute
+  - `--rps`: Rate limit in requests per second
+  - `--batch-size`: Specify a batch size instead of testing
+  - `--concurrency`: Force specific concurrency value (override calculated value)
+
+Example:
+```bash
+# Find optimal parameters for your RPC
+dex optimize --rpm 1800 --rpc https://base-rpc.publicnode.com
+
+# Force specific batch size and concurrency
+dex optimize --batch-size 50 --concurrency 10
+```
+
+<h2 id="overview">Overview of pool metadata retrieval methods 📚</h2>
 
 ### Metadata origin
 
@@ -196,20 +297,22 @@ This chart provides a view on how these approaches compare with each other (high
 - Strong DEX coverage (over 95%) without the need for custom logic for each individual DEX
 - Storage efficient: eliminates the requirement for maintaining large historical tables for every pool and token, which users are unlikely to query
 - More performant than solutions that process events one at a time
+- Smart caching reduces RPC calls for frequently queried pools
 
 **Cons**
 
 - Backfills (more precisely large number of pools) can be slower compared to using event logs and indexers, as it does not take advantage of pre-indexed data, also off-chain processing scales better than on-node solutions
 - Slightly higher latency in comparison to direct node access methods
 
-## Roadmap
 
+<h2 id="roadmap">Roadmap 🚧</h2>
+
+- [x] Cache with smart eviction policy
+- [x] CLI interface
 - [ ] DEX support
     - [ ] uniswap v4
     - [ ] balancer
     - [ ] Maverick
-- [ ] Cache with smart eviction policy
 - [ ] erpc integration
-- [ ] CLI interface
 - [ ] benchmarks
 - [ ] alternative method to leverage indexed data and off-chain processing for requests involving a higher number of pools

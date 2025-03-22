@@ -3,7 +3,7 @@ Module for decoding the response from deployless multicall.
 """
 
 import logging
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List
 
 from eth_abi import decode
 

@@ -41,7 +41,7 @@ class Pool:
         )
 
     def __repr__(self) -> str:
-        return f"{self.token0}/{self.token1} {self.address}"
+        return f"{self.token0}/{self.token1}({self.address})"
 
     def __str__(self) -> str:
         return (
