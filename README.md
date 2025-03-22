@@ -153,81 +153,6 @@ $ uv add dexmetadata
 
 Using a provider like Alchemy you can reach around 2000 pools/s of throughput (`batch_size=30`, `max_concurrent_batches=200`), own node can go way higher. At 2000 pools/s you can retrieve metadata for all Ethereum pools active in the past year in ~1 minute.
 
-<h2 id="caching">Caching 📦</h2>
-
-DexMetadata includes a smart caching system to avoid redundant RPC calls when the same pools are requested multiple times:
-
-```python
-# Enable caching with default settings
-pools = fetch(
-    POOL_ADDRESSES, 
-    rpc_url="https://base-rpc.publicnode.com",
-    use_cache=True,  # Enabled by default
-)
-
-# Configure cache size by number of pools
-pools = fetch(
-    POOL_ADDRESSES, 
-    rpc_url="https://base-rpc.publicnode.com",
-    cache_max_pools=10000,  # Default: 10,000 pools
-)
-
-# Or configure cache size by memory usage
-pools = fetch(
-    POOL_ADDRESSES,
-    rpc_url="https://base-rpc.publicnode.com", 
-    cache_max_size_mb=100,  # Override cache_max_pools
-)
-
-# Enable cache persistence between runs
-pools = fetch(
-    POOL_ADDRESSES,
-    rpc_url="https://base-rpc.publicnode.com",
-    cache_persist=True,  # Default: False
-)
-```
-
-The cache uses a hybrid LRU/LFU (Least Recently Used/Least Frequently Used) eviction policy to intelligently manage cached data. This ensures that both frequently accessed pools and recently accessed pools are prioritized in the cache.
-
-See the [cached fetch example](examples/cached_fetch.py) for more details on how to use the cache effectively.
-
-<h2 id="cli-options">CLI Options 💻</h2>
-
-- `fetch`: Retrieve pool metadata
-  - `--network`: Blockchain network (default: base)
-  - `--rpc-url`: Custom RPC URL
-  - `--output`, `-o`: Output file path (format auto-detected from extension: .json, .csv)
-  - `--format`: Override auto-detected output format (text, json, csv)
-  - `--batch-size`: Number of pools to fetch in a single batch (default: 30)
-  - `--max-concurrent-batches`: Maximum number of concurrent batch requests (default: 25)
-  - `--no-progress`: Disable progress bar
-  - Cache options:
-    - `--no-cache`: Disable caching
-    - `--cache-persist`: Enable cache persistence to disk
-    - `--cache-max-pools`: Maximum number of pools to cache (default: 10000)
-
-- `cache-info`: Display cache statistics
-  - Shows cache directory, database size, number of entries, usage percentage
-  - Lists most frequently accessed pools
-
-- `cache-clear`: Clear the cache entirely
-
-- `optimize`: Find optimal parameters for fetching pool metadata
-  - `--rpc-url`: RPC URL to test (default: https://base-rpc.publicnode.com)
-  - `--rpm`: Rate limit in requests per minute
-  - `--rps`: Rate limit in requests per second
-  - `--batch-size`: Specify a batch size instead of testing
-  - `--concurrency`: Force specific concurrency value (override calculated value)
-
-Example:
-```bash
-# Find optimal parameters for your RPC
-dex optimize --rpm 1800 --rpc https://base-rpc.publicnode.com
-
-# Force specific batch size and concurrency
-dex optimize --batch-size 50 --concurrency 10
-```
-
 <h2 id="overview">Overview of pool metadata retrieval methods 📚</h2>
 
 ### Metadata origin
@@ -304,6 +229,71 @@ This chart provides a view on how these approaches compare with each other (high
 - Backfills (more precisely large number of pools) can be slower compared to using event logs and indexers, as it does not take advantage of pre-indexed data, also off-chain processing scales better than on-node solutions
 - Slightly higher latency in comparison to direct node access methods
 
+<h2 id="caching">Caching 📦</h2>
+
+DexMetadata includes a smart caching system to avoid redundant RPC calls when the same pools are requested multiple times:
+
+```python
+# Enable caching with default settings
+pools = fetch(
+    POOL_ADDRESSES, 
+    rpc_url="https://base-rpc.publicnode.com",
+    use_cache=True,  # Enabled by default
+)
+
+# Configure cache size by number of pools
+pools = fetch(
+    POOL_ADDRESSES, 
+    rpc_url="https://base-rpc.publicnode.com",
+    cache_max_pools=10000,  # Default: 10,000 pools
+)
+
+# Or configure cache size by memory usage
+pools = fetch(
+    POOL_ADDRESSES,
+    rpc_url="https://base-rpc.publicnode.com", 
+    cache_max_size_mb=100,  # Override cache_max_pools
+)
+
+# Enable cache persistence between runs
+pools = fetch(
+    POOL_ADDRESSES,
+    rpc_url="https://base-rpc.publicnode.com",
+    cache_persist=True,  # Default: False
+)
+```
+
+The cache uses a hybrid LRU/LFU (Least Recently Used/Least Frequently Used) eviction policy to intelligently manage cached data. This ensures that both frequently accessed pools and recently accessed pools are prioritized in the cache.
+
+See the [cached fetch example](examples/cached_fetch.py) for more details on how to use the cache effectively.
+
+<h2 id="cli-options">CLI Options 💻</h2>
+
+- `fetch`: Retrieve pool metadata
+  - `--network`: Blockchain network (default: base)
+  - `--rpc-url`: Custom RPC URL
+  - `--output`, `-o`: Output file path (format auto-detected from extension: .json, .csv)
+  - `--format`: Override auto-detected output format (text, json, csv)
+  - `--batch-size`: Number of pools to fetch in a single batch (default: 30)
+  - `--max-concurrent-batches`: Maximum number of concurrent batch requests (default: 25)
+  - `--no-progress`: Disable progress bar
+  - Cache options:
+    - `--no-cache`: Disable caching
+    - `--cache-persist`: Enable cache persistence to disk
+    - `--cache-max-pools`: Maximum number of pools to cache (default: 10000)
+
+- `cache-info`: Display cache statistics
+  - Shows cache directory, database size, number of entries, usage percentage
+  - Lists most frequently accessed pools
+
+- `cache-clear`: Clear the cache entirely
+
+- `optimize`: Find optimal parameters for fetching pool metadata
+  - `--rpc-url`: RPC URL to test (default: https://base-rpc.publicnode.com)
+  - `--rpm`: Rate limit in requests per minute
+  - `--rps`: Rate limit in requests per second
+  - `--batch-size`: Specify a batch size instead of testing
+  - `--concurrency`: Force specific concurrency value (override calculated value)
 
 <h2 id="roadmap">Roadmap 🚧</h2>
 
