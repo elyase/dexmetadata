@@ -8,39 +8,279 @@ contracts.
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, NamedTuple, Optional, Set, Type, Union
 
-from eth_abi import decode, encode
-from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from web3 import Web3
 from web3.main import AsyncWeb3
 
-from .bytecode import POOL_dexmetadata_BYTECODE
+from .bytecode import POOL_METADATA_BYTECODE, UNISWAP_V4_METADATA_BYTECODE
 from .cache import get_default_cache
-from .decoder import POOL_METADATA_RESULT_TYPE
+from .constants import get_chain_id_from_network
+from .handlers import DefaultPoolFetcher, UniswapV4PoolFetcher, pool_handler_registry
 from .models import Pool
+from .progress import ProgressTracker, console
+from .utils import is_valid_metadata
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-# Global connection pool for Web3 providers
-_web3_providers = {}
-_connection_semaphore = asyncio.Semaphore(10)  # Limit concurrent connections
-console = Console()
+
+class PoolIdentifiers(NamedTuple):
+    """Container for categorized pool identifiers."""
+
+    regular_pools: List[str]
+    uniswap_v4_pools: List[str]
+
+
+class PoolResult(NamedTuple):
+    """Container for pool fetch results."""
+
+    original_id: str
+    metadata: Optional[Dict[str, Any]]
+
+
+class Web3Provider:
+    """Web3 provider with async connection management."""
+
+    def __init__(self, rpc_url: str):
+        self.rpc_url = rpc_url
+        self.provider = None
+
+    async def __aenter__(self):
+        """Initialize the provider when entering context."""
+        self.provider = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(self.rpc_url))
+        return self.provider
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Clean up the provider when exiting context."""
+        if self.provider and hasattr(self.provider, "provider"):
+            provider_obj = self.provider.provider
+
+            # Handle different session attribute names
+            if hasattr(provider_obj, "session") and provider_obj.session:
+                await provider_obj.session.close()
+            if hasattr(provider_obj, "_session") and provider_obj._session:
+                await provider_obj._session.close()
+            # Handle Web3.py 6.x style provider
+            if hasattr(provider_obj, "http_session") and provider_obj.http_session:
+                await provider_obj.http_session.close()
+
+
+class MetadataFetcher:
+    """Main class for fetching DEX pool metadata."""
+
+    def __init__(
+        self,
+        pool_identifiers: List[str],
+        rpc_url: str,
+        chain_id: int,
+        batch_size: int = 30,
+        max_concurrent_batches: int = 25,
+        show_progress: bool = True,
+        use_cache: bool = True,
+        cache_max_pools: int = 10000,
+        cache_max_size_mb: Optional[float] = None,
+        cache_persist: bool = True,
+    ):
+        self.pool_identifiers = pool_identifiers
+        self.rpc_url = rpc_url
+        self.chain_id = chain_id
+        self.batch_size = batch_size
+        self.max_concurrent_batches = max_concurrent_batches
+        self.show_progress = show_progress
+        self.use_cache = use_cache
+        self.cache_max_pools = cache_max_pools
+        self.cache_max_size_mb = cache_max_size_mb
+        self.cache_persist = cache_persist
+
+        # Initialize cache if enabled
+        self.cache = None
+        if use_cache:
+            self.cache = get_default_cache(
+                max_pools=cache_max_pools,
+                max_size_mb=cache_max_size_mb,
+                persist=cache_persist,
+            )
+            logger.info(f"Cache initialized with {len(self.cache)} entries")
+
+    def categorize_identifiers(self) -> Dict[Type[DefaultPoolFetcher], List[str]]:
+        """
+        Categorize pool identifiers by handler type.
+        """
+        return pool_handler_registry.categorize_identifiers(self.pool_identifiers)
+
+    def get_cached_results(
+        self, normalized_identifiers: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get cached results for the pool identifiers.
+        """
+        if not self.use_cache or not self.cache:
+            return {}
+
+        return self.cache.get_many(normalized_identifiers)
+
+    def update_cache(
+        self, results_by_id: Dict[str, Dict[str, Any]], cached_keys: Set[str]
+    ):
+        """
+        Update cache with new results.
+        """
+        if not self.use_cache or not self.cache:
+            return
+
+        new_cache_entries = {}
+        for identifier, result in results_by_id.items():
+            normalized_id = identifier.lower()
+            # Only cache valid results - explicitly check is_valid flag if present
+            if normalized_id not in cached_keys and is_valid_metadata(result):
+                if "is_valid" in result and not result["is_valid"]:
+                    continue  # Skip invalid results
+                new_cache_entries[normalized_id] = result
+
+        if new_cache_entries:
+            self.cache.put_many(new_cache_entries)
+            logger.info(f"Added {len(new_cache_entries)} new entries to cache")
+
+    async def fetch_metadata(self) -> List[Dict[str, Any]]:
+        """
+        Fetch metadata for all pool identifiers.
+        """
+        # Handle empty input
+        if not self.pool_identifiers:
+            return []
+
+        # Normalize identifiers for cache lookups
+        normalized_identifiers = [
+            identifier.lower() for identifier in self.pool_identifiers
+        ]
+
+        # Check cache for existing results
+        cached_data = self.get_cached_results(normalized_identifiers)
+        logger.info(f"Cache hits: {len(cached_data)}/{len(self.pool_identifiers)}")
+
+        # Return immediately if all data is in cache
+        if len(cached_data) == len(self.pool_identifiers):
+            if self.show_progress:
+                console.print(
+                    f"[green]✓[/green] Fetched metadata for {len(cached_data)} pools (all from cache)"
+                )
+            return list(cached_data.values())
+
+        # Initialize results and track which identifiers need to be fetched
+        results_by_id = {k: v for k, v in cached_data.items()}
+        cached_ids = set(cached_data.keys())
+
+        # Filter out identifiers that are already cached
+        identifiers_to_fetch = [
+            id for id in self.pool_identifiers if id.lower() not in cached_ids
+        ]
+
+        # Categorize remaining identifiers by handler type
+        handler_to_identifiers = pool_handler_registry.categorize_identifiers(
+            identifiers_to_fetch
+        )
+
+        # Count total identifiers to fetch
+        total_to_fetch = sum(len(ids) for ids in handler_to_identifiers.values())
+
+        # Initialize progress tracking
+        progress_tracker = ProgressTracker(total_to_fetch, self.show_progress)
+
+        # Show cache hit info if there are any
+        if self.show_progress and len(cached_data) > 0:
+            console.print(f"[green]✓[/green] Found {len(cached_data)} pools in cache")
+
+        progress_tracker.start()
+
+        # Create semaphore for limiting concurrent batches
+        batch_semaphore = asyncio.Semaphore(self.max_concurrent_batches)
+
+        # Use a context manager for the Web3 provider
+        async with Web3Provider(self.rpc_url) as web3_provider:
+            # Process each handler type
+            for handler_class, identifiers in handler_to_identifiers.items():
+                if not identifiers:
+                    continue
+
+                try:
+                    # Create appropriate handler instance
+                    if handler_class == UniswapV4PoolFetcher:
+                        # UniswapV4PoolFetcher requires chain_id
+                        handler = handler_class(
+                            web3_provider,
+                            self.batch_size,
+                            batch_semaphore,
+                            self.chain_id,
+                            progress_tracker,
+                        )
+                    else:
+                        # Default handler initialization
+                        handler = handler_class(
+                            web3_provider,
+                            self.batch_size,
+                            batch_semaphore,
+                            progress_tracker,
+                        )
+
+                    # Process pools with this handler
+                    handler_results = await handler.process_pools(identifiers)
+
+                    # Add results to the results dictionary with appropriate key
+                    for result in handler_results:
+                        # Use the unified identifier field as key
+                        key = result.get("identifier", "").lower()
+
+                        if key:
+                            results_by_id[key] = result
+
+                except Exception as e:
+                    logger.error(
+                        f"Error processing {handler_class.PROTOCOL_NAME} pools: {e}"
+                    )
+                    # Update progress tracker to account for failed identifiers
+                    if progress_tracker:
+                        progress_tracker.update(len(identifiers))
+
+        # Stop progress tracking
+        progress_tracker.stop()
+
+        # Update cache with new entries
+        self.update_cache(results_by_id, cached_ids)
+
+        # Build final results in original order
+        ordered_results = []
+        normalized_results = {k.lower(): v for k, v in results_by_id.items()}
+
+        for identifier in self.pool_identifiers:
+            if identifier in results_by_id:
+                ordered_results.append(results_by_id[identifier])
+            elif identifier.lower() in normalized_results:
+                ordered_results.append(normalized_results[identifier.lower()])
+            else:
+                logger.warning(f"Pool {identifier} not found in results")
+
+        # Show summary
+        if self.show_progress:
+            if ordered_results:
+                cache_msg = (
+                    f" ({len(cached_data)} from cache)"
+                    if self.use_cache and cached_data
+                    else ""
+                )
+                console.print(
+                    f"[green]✓[/green] Fetched metadata for {len(ordered_results)} pools{cache_msg}"
+                )
+            else:
+                console.print("[yellow]⚠[/yellow] No pool metadata found")
+
+        return ordered_results
 
 
 def fetch(
-    pool_addresses: List[str],
+    pool_identifiers: List[str],
     rpc_url: str = None,
     network: str = "base",
+    chain_id: Optional[int] = None,
     batch_size: int = 30,
     show_progress: bool = True,
     max_concurrent_batches: int = 25,
@@ -48,403 +288,193 @@ def fetch(
     use_cache: bool = True,
     cache_max_pools: int = 10000,
     cache_max_size_mb: Optional[float] = None,
-    cache_persist: bool = False,
+    cache_persist: bool = True,
 ) -> List[Union[Dict[str, Any], Pool]]:
     """
     Fetch metadata for DEX pools using deployless multicall with batching.
+    Supports both regular pool addresses and Uniswap v4 poolIds.
 
     Args:
-        pool_addresses: List of pool contract addresses
+        pool_identifiers: List of pool contract addresses or Uniswap v4 poolIds (bytes32 hex strings)
         rpc_url: RPC URL to connect to (defaults to publicnode.com RPC)
         network: Network name to use with publicnode.com RPC if rpc_url is not provided
-        batch_size: Maximum number of addresses to process in a single call
+        chain_id: Chain ID for the network (required for Uniswap v4 pools)
+        batch_size: Maximum number of identifiers to process in a single call
         show_progress: Whether to show a progress bar (default: True)
         max_concurrent_batches: Maximum number of batches to process concurrently (default: 25)
         format: Output format - either "dict" or "object" (default: "object")
         use_cache: Whether to use cache (default: True)
         cache_max_pools: Maximum number of pools to cache (default: 10000)
         cache_max_size_mb: Maximum cache size in MB (overrides cache_max_pools if provided)
-        cache_persist: Whether to persist cache to disk (default: False)
+        cache_persist: Whether to persist cache to disk (default: True)
 
     Returns:
         List of pool metadata dictionaries or Pool objects
     """
+    # Set up RPC URL if not provided
+    if rpc_url is None and network is not None:
+        rpc_url = f"https://{network}-rpc.publicnode.com"
+
+    # Try to run asynchronously
     try:
         # Check if we're already in an event loop
-        loop = asyncio.get_running_loop()
-        # We're in an async context, create a new loop in a thread
+        asyncio.get_running_loop()
+
+        # We're in an async context, need to use thread
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor() as pool:
             future = pool.submit(
-                asyncio.run,
-                fetch_async(
-                    pool_addresses=pool_addresses,
-                    rpc_url=rpc_url,
-                    network=network,
-                    batch_size=batch_size,
-                    show_progress=show_progress,
-                    max_concurrent_batches=max_concurrent_batches,
-                    format=format,
-                    use_cache=use_cache,
-                    cache_max_pools=cache_max_pools,
-                    cache_max_size_mb=cache_max_size_mb,
-                    cache_persist=cache_persist,
-                ),
+                run_fetch_in_new_event_loop,
+                pool_identifiers,
+                rpc_url,
+                network,
+                chain_id,
+                batch_size,
+                show_progress,
+                max_concurrent_batches,
+                format,
+                use_cache,
+                cache_max_pools,
+                cache_max_size_mb,
+                cache_persist,
             )
             return future.result()
     except RuntimeError:
-        # No running event loop, create a new one
+        # Not in an event loop, can use asyncio.run directly
         return asyncio.run(
-            fetch_async(
-                pool_addresses=pool_addresses,
-                rpc_url=rpc_url,
-                network=network,
-                batch_size=batch_size,
-                show_progress=show_progress,
-                max_concurrent_batches=max_concurrent_batches,
-                format=format,
-                use_cache=use_cache,
-                cache_max_pools=cache_max_pools,
-                cache_max_size_mb=cache_max_size_mb,
-                cache_persist=cache_persist,
+            run_fetch_async(
+                pool_identifiers,
+                rpc_url,
+                network,
+                chain_id,
+                batch_size,
+                show_progress,
+                max_concurrent_batches,
+                format,
+                use_cache,
+                cache_max_pools,
+                cache_max_size_mb,
+                cache_persist,
             )
         )
 
 
-async def fetch_async(
-    pool_addresses: List[str],
+async def run_fetch_async(
+    pool_identifiers: List[str],
     rpc_url: str,
     network: str,
+    chain_id: Optional[int],
     batch_size: int,
-    max_concurrent_batches: int,
     show_progress: bool,
-    format: Literal["dict", "object"] = "dict",
-    use_cache: bool = True,
-    cache_max_pools: int = 10000,
-    cache_max_size_mb: Optional[float] = None,
-    cache_persist: bool = False,
+    max_concurrent_batches: int,
+    format: Literal["dict", "object"],
+    use_cache: bool,
+    cache_max_pools: int,
+    cache_max_size_mb: Optional[float],
+    cache_persist: bool,
 ) -> List[Union[Dict[str, Any], Pool]]:
-    """
-    Asynchronously fetch metadata for DEX pools using deployless multicall with batching.
+    """Run the fetch operation asynchronously."""
+    # Determine chain ID if not provided
+    if chain_id is None:
+        # Try to get from network name or RPC URL
+        chain_id = get_chain_id_from_network(network, rpc_url)
 
-    Args:
-        pool_addresses: List of pool contract addresses
-        rpc_url: RPC URL to connect to (defaults to publicnode.com RPC)
-        network: Network name to use with publicnode.com RPC if rpc_url is not provided
-        batch_size: Maximum number of addresses to process in a single call (default: 120)
-        max_concurrent_batches: Maximum number of batches to process concurrently (default: 5)
-        show_progress: Whether to show a progress bar (default: True)
-        format: Output format - either "dict" or "object"
-        use_cache: Whether to use cache (default: True)
-        cache_max_pools: Maximum number of pools to cache (default: 10000)
-        cache_max_size_mb: Maximum cache size in MB (overrides cache_max_pools if provided)
-        cache_persist: Whether to persist cache to disk (default: False)
-
-    Returns:
-        List of pool metadata dictionaries or Pool objects
-    """
-    if rpc_url is None and network is not None:
-        rpc_url = f"https://{network}-rpc.publicnode.com"
-
-    # Handle empty input
-    if not pool_addresses:
-        logger.debug("No pool addresses provided")
-        return []
-
-    # Filter and validate addresses
-    valid_addresses = []
-    address_to_idx = {}  # Track original positions to preserve order
-
-    # Validate addresses without progress bar
-    for idx, addr in enumerate(pool_addresses):
-        try:
-            if Web3.is_address(addr):  # Static method that doesn't need a provider
-                checksum_addr = Web3.to_checksum_address(addr)
-                valid_addresses.append(checksum_addr)
-                address_to_idx[checksum_addr] = idx
-            else:
-                logger.warning(f"Invalid address format: {addr}")
-        except Exception as e:
-            logger.warning(f"Error validating address {addr}: {e}")
-
-    # If no valid addresses after filtering, return empty list
-    if not valid_addresses:
-        logger.debug("No valid addresses found after filtering")
-        return []
-
-    logger.info(f"Processing {len(valid_addresses)} valid pool addresses")
-
-    # Prepare results in the original order
-    results_by_address = {}
-    cache_hits = 0
-    addresses_to_fetch = []
-
-    # Initialize cache if enabled
-    cache = None
-    if use_cache:
-        logger.info(
-            f"Cache enabled (max_pools={cache_max_pools}, persist={cache_persist})"
-        )
-        cache = get_default_cache(
-            max_pools=cache_max_pools,
-            max_size_mb=cache_max_size_mb,
-            persist=cache_persist,
-        )
-        logger.info(f"Cache initialized with {len(cache)} entries")
-
-        # Check cache for each address
-        cached_data = cache.get_many(valid_addresses)
-
-        # Populate results with cached data and track addresses to fetch
-        for addr in valid_addresses:
-            if addr in cached_data:
-                results_by_address[addr] = cached_data[addr]
-                cache_hits += 1
-            else:
-                addresses_to_fetch.append(addr)
-
-        logger.info(f"Cache hits: {cache_hits}/{len(valid_addresses)}")
-    else:
-        # If cache is disabled, fetch all addresses
-        addresses_to_fetch = valid_addresses
-        logger.info("Cache disabled, fetching all addresses")
-
-    # If all pools are in cache, skip RPC calls
-    if not addresses_to_fetch:
-        logger.info("All requested pools found in cache")
-
-        # Prepare result in original order
-        ordered_results = [results_by_address[addr] for addr in valid_addresses]
-
-        # Convert to Pool objects if requested
-        if format == "object":
-            return [Pool.from_dict(data) for data in ordered_results]
-        return ordered_results
-
-    logger.info(f"Fetching {len(addresses_to_fetch)} pools from RPC")
-
-    # Get or create an async Web3 provider for RPC calls
-    web3_provider = await get_web3_provider(rpc_url)
-
-    # Split addresses to fetch into batches
-    batches = []
-    for i in range(0, len(addresses_to_fetch), batch_size):
-        batches.append(addresses_to_fetch[i : i + batch_size])
-
-    logger.info(f"Created {len(batches)} batches (batch_size={batch_size})")
-
-    # Initialize progress display
-    fetch_progress = None
-    if show_progress:
-        fetch_progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[bold green]Fetching pool metadata..."),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-        )
-        total_pools = len(addresses_to_fetch)
-        task_id = fetch_progress.add_task("Fetching", total=total_pools)
-        fetch_progress.start()
-
-    # Create a semaphore to limit concurrent batches
-    batch_semaphore = asyncio.Semaphore(max_concurrent_batches)
-
-    completed_pools = 0
-    total_batches = len(batches)
-
-    # Define the task for processing a batch
-    async def process_batch(
-        batch_index: int, batch_addresses: List[str]
-    ) -> List[Dict[str, Any]]:
-        nonlocal completed_pools
-
-        async with batch_semaphore:
-            batch_desc = f"Batch {batch_index + 1}/{total_batches}"
-            logger.debug(
-                f"Processing {batch_desc} with {len(batch_addresses)} addresses"
-            )
-
+        if chain_id is None:
+            # Try to get from web3 provider
             try:
-                # Encode constructor arguments with batch addresses
-                constructor_args = encode(["address[]"], [batch_addresses])
-                data = POOL_dexmetadata_BYTECODE + constructor_args.hex().replace(
-                    "0x", ""
-                )
-
-                # Make the call (no 'to' field for deployless execution)
-                async with _connection_semaphore:
-                    logger.debug(f"Making eth_call for {batch_desc}")
-                    result = await web3_provider.eth.call({"data": data})
-
-                # Handle empty response
-                if not result:
-                    logger.warning(f"Empty response from eth_call for {batch_desc}")
-                    if fetch_progress:
-                        fetch_progress.update(task_id, advance=len(batch_addresses))
-                    completed_pools += len(batch_addresses)
-                    return []
-
-                # Decode the response
-                try:
-                    decoded_pools = decode([POOL_METADATA_RESULT_TYPE], result)[0]
-                    logger.debug(
-                        f"Successfully decoded {len(decoded_pools)} pools for {batch_desc}"
-                    )
-                except Exception as e:
-                    logger.error(f"Error decoding response for {batch_desc}: {e}")
-                    if fetch_progress:
-                        fetch_progress.update(task_id, advance=len(batch_addresses))
-                    completed_pools += len(batch_addresses)
-                    return []
-
-                # Create result dictionaries
-                batch_results = []
-                for pool in decoded_pools:
-                    try:
-                        # Verify required fields are present
-                        if not pool[0] or not pool[1][0] or not pool[2][0]:
-                            logger.debug(
-                                f"Skipping pool with missing required fields: {pool[0]}"
-                            )
-                            continue
-
-                        batch_results.append(
-                            {
-                                "pool_address": pool[0],
-                                "token0_address": pool[1][0],
-                                "token0_name": pool[1][1],
-                                "token0_symbol": pool[1][2],
-                                "token0_decimals": pool[1][3],
-                                "token1_address": pool[2][0],
-                                "token1_name": pool[2][1],
-                                "token1_symbol": pool[2][2],
-                                "token1_decimals": pool[2][3],
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Error processing pool result: {e}")
-                        continue
-
-                logger.info(
-                    f"Successfully processed {batch_desc} with {len(batch_results)}/{len(batch_addresses)} results"
-                )
-
-                # Update progress based on number of pools in this batch
-                if fetch_progress:
-                    fetch_progress.update(task_id, advance=len(batch_addresses))
-                completed_pools += len(batch_addresses)
-
-                return batch_results
-
+                async with Web3Provider(rpc_url) as web3:
+                    chain_id = await web3.eth.chain_id
+                    logger.info(f"Detected chain ID: {chain_id}")
             except Exception as e:
-                logger.error(f"Error fetching pool metadata for {batch_desc}: {e}")
-                # Update progress even on error
-                if fetch_progress:
-                    fetch_progress.update(task_id, advance=len(batch_addresses))
-                completed_pools += len(batch_addresses)
-                return []  # Return empty list for failed batch
+                logger.error(f"Could not determine chain ID: {e}")
+                raise ValueError(
+                    f"Could not determine chain ID for network '{network}'. "
+                    "Please provide chain_id parameter or ensure network name is valid."
+                )
 
-    # Create and run tasks for all batches
-    tasks = [process_batch(i, batch) for i, batch in enumerate(batches)]
-    batch_results = await asyncio.gather(*tasks)
+    # Create and run the fetcher
+    fetcher = MetadataFetcher(
+        pool_identifiers=pool_identifiers,
+        rpc_url=rpc_url,
+        chain_id=chain_id,
+        batch_size=batch_size,
+        max_concurrent_batches=max_concurrent_batches,
+        show_progress=show_progress,
+        use_cache=use_cache,
+        cache_max_pools=cache_max_pools,
+        cache_max_size_mb=cache_max_size_mb,
+        cache_persist=cache_persist,
+    )
 
-    # Stop progress display
-    if fetch_progress:
-        fetch_progress.stop()
-
-    # Process newly fetched results
-    new_results = []
-    for batch in batch_results:
-        new_results.extend(batch)
-
-    logger.info(f"Fetched {len(new_results)} new pool results")
-
-    # Add new results to cache and results dictionary
-    new_cache_entries = {}
-    for result in new_results:
-        addr = result["pool_address"]
-        # Ensure the address is checksummed for consistent comparison
-        addr = Web3.to_checksum_address(addr)
-        result["pool_address"] = addr  # Update to ensure consistent format
-        results_by_address[addr] = result
-
-        # Add to cache entries for batch update
-        if use_cache:
-            new_cache_entries[addr] = result
-
-    # Update cache with new entries
-    if use_cache and new_cache_entries:
-        cache.put_many(new_cache_entries)
-        logger.info(f"Added {len(new_cache_entries)} entries to cache")
-
-    # Build final results in original order
-    ordered_results = []
-    missing_results = 0
-
-    for addr in valid_addresses:
-        if addr in results_by_address:
-            ordered_results.append(results_by_address[addr])
-        else:
-            missing_results += 1
-            logger.warning(f"Pool {addr} not found in results")
-
-    if missing_results > 0:
-        logger.warning(f"Missing results for {missing_results} pools")
-        # Debug output to help diagnose
-        logger.debug(f"Valid addresses: {valid_addresses}")
-        logger.debug(f"Results available for: {list(results_by_address.keys())}")
-
-    # Show summary
-    if show_progress:
-        if len(ordered_results) > 0:
-            cache_msg = (
-                f" ({cache_hits} from cache)" if use_cache and cache_hits > 0 else ""
-            )
-            console.print(
-                f"[green]✓[/green] Fetched metadata for {len(ordered_results)} pools{cache_msg}"
-            )
-        else:
-            console.print("[yellow]⚠[/yellow] No pool metadata found")
-
-    logger.info(f"Finished processing. Total results: {len(ordered_results)}")
+    # Fetch the metadata
+    results = await fetcher.fetch_metadata()
 
     # Convert to Pool objects if requested
     if format == "object":
-        return [Pool.from_dict(data) for data in ordered_results]
-    return ordered_results
+        return [Pool.from_dict(data) for data in results]
+    return results
 
 
-async def get_web3_provider(rpc_url: str) -> AsyncWeb3:
-    """
-    Get or create an async Web3 provider for the given RPC URL.
-    Uses a connection pool to avoid creating too many connections.
+def run_fetch_in_new_event_loop(
+    pool_identifiers: List[str],
+    rpc_url: str,
+    network: str,
+    chain_id: Optional[int],
+    batch_size: int,
+    show_progress: bool,
+    max_concurrent_batches: int,
+    format: Literal["dict", "object"],
+    use_cache: bool,
+    cache_max_pools: int,
+    cache_max_size_mb: Optional[float],
+    cache_persist: bool,
+) -> List[Union[Dict[str, Any], Pool]]:
+    """Run fetch_async in a new event loop."""
+    # Create a new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-    Args:
-        rpc_url: The RPC URL to connect to
+    try:
+        return loop.run_until_complete(
+            run_fetch_async(
+                pool_identifiers,
+                rpc_url,
+                network,
+                chain_id,
+                batch_size,
+                show_progress,
+                max_concurrent_batches,
+                format,
+                use_cache,
+                cache_max_pools,
+                cache_max_size_mb,
+                cache_persist,
+            )
+        )
+    finally:
+        # Clean up any remaining tasks
+        try:
+            tasks = asyncio.all_tasks(loop)
+            if tasks:
+                cleanup_task = asyncio.gather(*tasks, return_exceptions=True)
+                loop.run_until_complete(asyncio.wait_for(cleanup_task, timeout=5))
+        except Exception:
+            pass
 
-    Returns:
-        An AsyncWeb3 instance
-    """
-    # Check if we already have a provider for this URL
-    if rpc_url in _web3_providers:
-        return _web3_providers[rpc_url]
+        # Final cleanup
+        try:
+            loop.run_until_complete(asyncio.sleep(0))
+        except Exception:
+            pass
 
-    # Create a new provider
-    async_provider = AsyncWeb3.AsyncHTTPProvider(rpc_url)
-    web3 = AsyncWeb3(async_provider)
-
-    # Store in the pool
-    _web3_providers[rpc_url] = web3
-
-    return web3
+        loop.close()
 
 
 def calculate_rate_limit_params(
     rate_limit: float,
     avg_response_time: float = 0.7,
-    target_utilization: float = 0.5,  # More conservative default
+    target_utilization: float = 0.5,
     is_per_second: bool = False,
 ) -> dict:
     """

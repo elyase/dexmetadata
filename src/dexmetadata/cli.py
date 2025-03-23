@@ -15,7 +15,6 @@ from typing import List, Optional
 from dexmetadata import fetch
 from dexmetadata.cache import (
     DEFAULT_CACHE_DIR,
-    DEFAULT_DB_FILENAME,
     get_default_cache,
 )
 from dexmetadata.optimize import optimize
@@ -59,7 +58,7 @@ def fetch_cli(
     output_format: str = None,
     use_cache: bool = True,
     cache_max_pools: int = 10000,
-    cache_persist: bool = False,
+    cache_persist: bool = True,
 ):
     """Fetch metadata for pool addresses."""
     start_time = time.time()
@@ -170,42 +169,55 @@ def fetch_cli(
 def cache_info_cli():
     """Display information about the dexmetadata cache."""
     cache = get_default_cache(persist=True)  # Enable persistence to see persisted data
-    stats = cache.get_stats()
 
-    # Check if the database file exists
-    db_path = DEFAULT_CACHE_DIR / DEFAULT_DB_FILENAME
-    db_exists = db_path.exists()
-    db_size = 0
-    if db_exists:
-        db_size = os.path.getsize(db_path)
+    try:
+        stats = cache.get_stats()
 
-    print("\n=== DexMetadata Cache Information ===")
-    print(f"Cache Directory: {DEFAULT_CACHE_DIR}")
-    print(f"Database File: {DEFAULT_DB_FILENAME}")
-    print(f"Database Exists: {'Yes' if db_exists else 'No'}")
-    print(f"Database Size: {format_size(db_size)}")
-    print(f"Persistence Enabled: {'Yes' if stats['persist_enabled'] else 'No'}")
-    print("\n--- Cache Statistics ---")
-    print(f"Entries: {stats['entries']:,}")
-    print(f"Maximum Entries: {stats['max_entries']:,}")
-    print(f"Usage: {stats['usage_percent']:.1f}%")
-    print(
-        f"Estimated Memory Usage: {format_size(stats['approx_size_mb'] * 1024 * 1024)}"
-    )
+        # Get cache directory information
+        cache_dir = cache.cache_dir
+        cache_dir_exists = Path(cache_dir).exists()
 
-    if stats["entries"] > 0:
-        print("\n--- Top Accessed Pools ---")
-        for i, pool in enumerate(stats["top_accessed_pools"]):
-            print(f"{i + 1}. {pool['address']} (accessed {pool['access_count']} times)")
+        # Calculate directory size for diskcache
+        total_size = 0
+        if cache_dir_exists:
+            for dirpath, dirnames, filenames in os.walk(cache_dir):
+                for filename in filenames:
+                    file_path = os.path.join(dirpath, filename)
+                    total_size += os.path.getsize(file_path)
+
+        print("\n=== DexMetadata Cache Information ===")
+        print(f"Cache Directory: {cache_dir}")
+        print(f"Directory Exists: {'Yes' if cache_dir_exists else 'No'}")
+        print(f"Total Cache Size: {format_size(total_size)}")
+        print(f"Persistence Enabled: {'Yes' if stats['persist_enabled'] else 'No'}")
+        print("\n--- Cache Statistics ---")
+        print(f"Entries: {stats['entries']:,}")
+        print(f"Maximum Entries: {stats['max_entries']:,}")
+        print(f"Usage: {stats['usage_percent']:.1f}%")
+        print(f"Approximate Size: {format_size(stats['approx_size_mb'] * 1024 * 1024)}")
+
+        # Show hit/miss statistics if available
+        if "hits" in stats and "misses" in stats:
+            print(f"Cache Hits: {stats['hits']:,}")
+            print(f"Cache Misses: {stats['misses']:,}")
+            print(f"Hit Rate: {stats.get('hit_rate', 0):.1f}%")
+
+    except Exception as e:
+        print(f"\nError getting cache information: {e}")
+        print("This might happen if the cache hasn't been initialized yet.")
 
 
 def cache_clear_cli():
     """Clear the cache entirely."""
-    cache = get_default_cache(
-        persist=True
-    )  # Enable persistence to clear persisted data
-    cache.clear()
-    print("Cache cleared successfully.")
+    try:
+        cache = get_default_cache(
+            persist=True
+        )  # Enable persistence to clear persisted data
+        entries_before = len(cache)
+        cache.clear()
+        print(f"Cache cleared successfully. Removed {entries_before:,} entries.")
+    except Exception as e:
+        print(f"Error clearing cache: {e}")
 
 
 def optimize_cli(
@@ -267,14 +279,16 @@ def main():
     )
     fetch_parser.add_argument("--no-cache", action="store_true", help="Disable cache")
     fetch_parser.add_argument(
-        "--cache-persist", action="store_true", help="Persist cache to disk"
+        "--no-cache-persist",
+        action="store_true",
+        help="Disable cache persistence to disk",
     )
 
     # Cache info command
     subparsers.add_parser("cache-info", help="Show cache information")
 
     # Cache clear command
-    subparsers.add_parser("cache-clear", help="Clear cache entirely")
+    cache_clear_parser = subparsers.add_parser("cache-clear", help="Clear the cache")
 
     # Optimize command
     optimize_parser = subparsers.add_parser(
@@ -320,12 +334,12 @@ def main():
             output_file=args.output_file,
             output_format=args.output_format,
             use_cache=not args.no_cache,
-            cache_persist=args.cache_persist,
+            cache_persist=not args.no_cache_persist,
         )
     elif args.command == "cache-info":
         return cache_info_cli()
     elif args.command == "cache-clear":
-        return cache_clear_cli()
+        cache_clear_cli()
     elif args.command == "optimize":
         return optimize_cli(
             rpc_url=args.rpc_url,

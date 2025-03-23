@@ -104,7 +104,7 @@ def _compile_contract(contract_path: Path) -> Optional[str]:
         # Parse the output to extract bytecode
         output_lines = result.stdout.strip().split("\n")
         bytecode = None
-        main_contract = f"{contract_path.stem}.sol:{contract_path.stem}Fixed"
+        main_contract = f"{contract_path.stem}.sol:{contract_path.stem}"
 
         # Look for the main contract's bytecode
         for i, line in enumerate(output_lines):
@@ -133,10 +133,19 @@ def _compile_contract(contract_path: Path) -> Optional[str]:
         return None
 
 
-# Load the pool metadata fetcher bytecode
-POOL_dexmetadata_BYTECODE = load_bytecode(
+# Load the regular pool metadata fetcher bytecode
+POOL_METADATA_BYTECODE = load_bytecode(
     Path(__file__).parent / "contracts" / "PoolMetadataFetcher.sol"
 )
 
-if not POOL_dexmetadata_BYTECODE:
+# Load the Uniswap v4 pool metadata fetcher bytecode
+UNISWAP_V4_METADATA_BYTECODE = load_bytecode(
+    Path(__file__).parent / "contracts" / "UniswapV4MetadataFetcher.sol"
+)
+
+# Check bytecode loading
+if not POOL_METADATA_BYTECODE:
     raise RuntimeError("Failed to load PoolMetadataFetcher bytecode")
+
+if not UNISWAP_V4_METADATA_BYTECODE:
+    raise RuntimeError("Failed to load UniswapV4MetadataFetcher bytecode")

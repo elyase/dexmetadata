@@ -11,34 +11,30 @@ POOL_ADDRESSES = [
     "0x31f609019d0CC0b8cC865656142d6FeD69853689",  # POPCAT/WETH on uniswap v2
     "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",  # AERO/USDC on Aerodrome
     "0x323b43332F97B1852D8567a08B1E8ed67d25A8d5",  # msETH/WETH on Pancake Swap
-] * 250
+    "0xe6195a1f1c8f5d0bcf0a880db26738a1df4f6863017700a8f6377a72d45366f2",  # cbBTC/ETH on Uniswap v4
+    "0x123456789abcdef0123456789abcdef012345678",  # non-existent pool
+]
 
 
 def main():
     pools = fetch(
         POOL_ADDRESSES,
         rpc_url="https://base-rpc.publicnode.com",
+        chain_id=8453,  # Base chain ID (required for Uniswap v4 pools)
         batch_size=30,
         max_concurrent_batches=25,
+        use_cache=False,
     )
 
     assert pools[0].token0.symbol == "USDC"
-
     assert pools[0].token1.name == "Coinbase Wrapped BTC"
     assert pools[0].token1.symbol == "cbBTC"
     assert pools[0].token1.address == "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf"
     assert pools[0].token1.decimals == 8
 
-    print(pools[0])
-    # USDC/cbBTC (0xfbb6eed8e7aa03b138556eedaf5d271a5e1e43ef)
-    # ├─ USD Coin
-    # │    ├ USDC
-    # │    ├ 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913
-    # │    └ 6
-    # └─ Coinbase Wrapped BTC
-    #      ├ cbBTC
-    #      ├ 0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf
-    #      └ 8
+    print(f"Fetched {len(pools)} pools:")
+    for i, pool in enumerate(pools):
+        print(pool)
 
 
 if __name__ == "__main__":
