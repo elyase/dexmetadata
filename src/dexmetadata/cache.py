@@ -247,6 +247,11 @@ class PoolMetadataCache:
     def _normalize_key(self, key: str) -> str:
         """Normalize cache key to avoid case sensitivity issues."""
         return key.lower() if key else key
+        
+    def chain_specific_key(self, key: str, chain_id: int) -> str:
+        """Create a chain-specific cache key."""
+        normalized = self._normalize_key(key)
+        return f"{chain_id}:{normalized}"
 
 
 class CacheManager:

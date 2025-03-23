@@ -117,7 +117,18 @@ class MetadataFetcher:
         if not self.use_cache or not self.cache:
             return {}
 
-        return self.cache.get_many(normalized_identifiers)
+        # Use chain-specific cache keys if chain_id is available
+        if hasattr(self.cache, "chain_specific_key") and self.chain_id:
+            chain_specific_keys = [
+                self.cache.chain_specific_key(id, self.chain_id) 
+                for id in normalized_identifiers
+            ]
+            logger.debug(f"Using chain-specific cache keys for chain_id {self.chain_id}")
+            return self.cache.get_many(chain_specific_keys)
+        else:
+            # Fallback to regular cache keys
+            logger.debug("Using standard cache keys (no chain ID)")
+            return self.cache.get_many(normalized_identifiers)
 
     def update_cache(
         self, results_by_id: Dict[str, Dict[str, Any]], cached_keys: Set[str]
@@ -131,11 +142,23 @@ class MetadataFetcher:
         new_cache_entries = {}
         for identifier, result in results_by_id.items():
             normalized_id = identifier.lower()
+            
+            # Use chain-specific key if available
+            if hasattr(self.cache, "chain_specific_key") and self.chain_id:
+                cache_key = self.cache.chain_specific_key(normalized_id, self.chain_id)
+            else:
+                cache_key = normalized_id
+                
             # Only cache valid results - explicitly check is_valid flag if present
-            if normalized_id not in cached_keys and is_valid_metadata(result):
+            if cache_key not in cached_keys and is_valid_metadata(result):
                 if "is_valid" in result and not result["is_valid"]:
                     continue  # Skip invalid results
-                new_cache_entries[normalized_id] = result
+                
+                # Add chain_id to cached result for future reference
+                if self.chain_id and "chain_id" not in result:
+                    result["chain_id"] = self.chain_id
+                    
+                new_cache_entries[cache_key] = result
 
         if new_cache_entries:
             self.cache.put_many(new_cache_entries)
