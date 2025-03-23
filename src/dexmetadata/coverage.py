@@ -35,19 +35,8 @@ DEFAULT_RPC_URLS = {
     "ethereum": "https://ethereum-rpc.publicnode.com",
     "optimism": "https://optimism-rpc.publicnode.com",
     "arbitrum": "https://arbitrum-rpc.publicnode.com",
-    "polygon": "https://polygon-rpc.publicnode.com",
-    "blast": "https://blast-rpc.publicnode.com",
-    "zora": "https://rpc.zora.energy",
-    "avalanche_c": "https://avalanche-rpc.publicnode.com",
     "bnb": "https://bsc-rpc.publicnode.com",
-    "linea": "https://linea-rpc.publicnode.com",
-    "zkevm": "https://polygon-zkevm-rpc.publicnode.com",
-    "zksync": "https://zksync-rpc.publicnode.com",
-    "scroll": "https://scroll-rpc.publicnode.com",
-    "mantle": "https://mantle-rpc.publicnode.com",
-    "nova": "https://nova-rpc.publicnode.com",
-    "fantom": "https://fantom-rpc.publicnode.com",
-    "gnosis": "https://gnosis-rpc.publicnode.com",
+    "polygon": "https://polygon-rpc.publicnode.com",
 }
 
 
@@ -199,7 +188,7 @@ async def analyze_coverage(
             rpc_url = rpc_urls[chain]
 
             # Use smaller batch size for Ethereum to avoid out-of-gas errors
-            batch_size = 15 if "ethereum" in rpc_url.lower() else 30
+            batch_size = 5 if "ethereum" in rpc_url.lower() else 30
             if "ethereum" in rpc_url.lower():
                 logger.info(
                     f"Using reduced batch size ({batch_size}) for {chain} to prevent 'out of gas' errors"

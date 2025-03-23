@@ -15,8 +15,10 @@ Python library for fetching metadata from DEX pools
   <a href="#how-it-works">How It Works</a> •
   <a href="#performance">Performance</a> •
   <a href="#overview">Metadata Retrieval Methods</a> •
-  <a href="#caching">Caching</a> •
-  <a href="#cli-options">CLI Options</a>
+  <a href="#cli-options">CLI Options</a> •
+  <a href="#coverage">Protocol Coverage</a> •
+  <a href="#roadmap">Roadmap</a>
+  
 </div>
 
 <p align="center">
@@ -67,6 +69,9 @@ dex fetch 0xfBB6Eed8e7aa03B138556eeDaF5D271A5E1e43ef --network base
 dex cache-info
 dex cache-clear
 
+# protocol coverage
+dex coverage
+
 # Optimize
 dex optimize --rpm 1800 --rpc https://base-rpc.publicnode.com
 ```
@@ -75,7 +80,7 @@ dex optimize --rpm 1800 --rpc https://base-rpc.publicnode.com
 
 - No fancy setup ([dbt pipelines](https://github.com/duneanalytics/spellbook/tree/main/dbt_subprojects/dex/models/trades) / datalake infrastructure / [customized nodes](https://github.com/shadow-hq/shadow-reth)) needed, just plug in any standard RPC and you're good to go
 - Uses some clever EVM tricks (assembly optimized [deployless multicall](https://destiner.io/blog/post/deployless-multicall/)) to get the job done quickly and cheaply
-- Covers [95%+ of swaps out there](examples/coverage.py) without DEX-specific custom transform logic
+- Covers 95%+ of swaps out there without DEX-specific custom transform logic
 - Processes multiple pools at once to keep things fast and efficient
 - [Handy tool](examples/optimize.py) to automatically find good settings for your RPC
 - Persistent caching with hybrid LRU/LFU eviction policy for frequently queried pools
@@ -229,44 +234,6 @@ This chart provides a view on how these approaches compare with each other (high
 - Backfills (more precisely large number of pools) can be slower compared to using event logs and indexers, as it does not take advantage of pre-indexed data, also off-chain processing scales better than on-node solutions
 - Slightly higher latency in comparison to direct node access methods
 
-<h2 id="caching">Caching 📦</h2>
-
-DexMetadata includes a smart caching system to avoid redundant RPC calls when the same pools are requested multiple times:
-
-```python
-# Enable caching with default settings
-pools = fetch(
-    POOL_ADDRESSES, 
-    rpc_url="https://base-rpc.publicnode.com",
-    use_cache=True,  # Enabled by default
-)
-
-# Configure cache size by number of pools
-pools = fetch(
-    POOL_ADDRESSES, 
-    rpc_url="https://base-rpc.publicnode.com",
-    cache_max_pools=10000,  # Default: 10,000 pools
-)
-
-# Or configure cache size by memory usage
-pools = fetch(
-    POOL_ADDRESSES,
-    rpc_url="https://base-rpc.publicnode.com", 
-    cache_max_size_mb=100,  # Override cache_max_pools
-)
-
-# Enable cache persistence between runs
-pools = fetch(
-    POOL_ADDRESSES,
-    rpc_url="https://base-rpc.publicnode.com",
-    cache_persist=True,  # Default: False
-)
-```
-
-The cache uses a hybrid LRU/LFU (Least Recently Used/Least Frequently Used) eviction policy to intelligently manage cached data. This ensures that both frequently accessed pools and recently accessed pools are prioritized in the cache.
-
-See the [cached fetch example](examples/cached_fetch.py) for more details on how to use the cache effectively.
-
 <h2 id="cli-options">CLI Options 💻</h2>
 
 - `fetch`: Retrieve pool metadata
@@ -295,14 +262,84 @@ See the [cached fetch example](examples/cached_fetch.py) for more details on how
   - `--batch-size`: Specify a batch size instead of testing
   - `--concurrency`: Force specific concurrency value (override calculated value)
 
+<h2 id="coverage">Protocol coverage 📡</h2>
+
+Protocol Coverage  
+| Chain    | Coverage % | protocols |
+|----------|------------|-------|
+| bnb      |      99.2% | 12/19 |
+| arbitrum |      97.1% | 10/17 |
+| base     |      95.9% | 16/25 |
+| optimism |      94.2% |  9/13 |
+| ethereum |      89.3% |  6/23 |
+| polygon  |       0.1% |  0/14 |
+
+<details>
+<summary>Failure Rates by Protocol </summary>
+
+| Protocol                             | Chain    | Failure Rate |
+|--------------------------------------|----------|--------------|
+| trader_joe_2.1                       | arbitrum |        1.0%  |
+| balancer_2                           | arbitrum |        0.7%  |
+| maverick_2                           | arbitrum |        0.4%  |
+| swaap_2                              | arbitrum |        0.3%  |
+| trader_joe_2.2                       | arbitrum |        0.3%  |
+| dodo_2                               | arbitrum |        0.3%  |
+| dodo_1                               | arbitrum |        0.1%  |
+| maverick_2                           | base     |        1.7%  |
+| maverick_1                           | base     |        0.7%  |
+| swaap_2                              | base     |        0.6%  |
+| balancer_2                           | base     |        0.4%  |
+| openocean_2                          | base     |        0.3%  |
+| balancer_3                           | base     |        0.2%  |
+| clipper_1                            | base     |        0.1%  |
+| woofi_2                              | base     |        0.1%  |
+| 1inch-LOP_4                          | base     |        0.1%  |
+| dodo_2                               | bnb      |        0.2%  |
+| pancakeswap_stableswap               | bnb      |        0.2%  |
+| maverick_2                           | bnb      |        0.1%  |
+| 1inch-LOP_4                          | bnb      |        0.1%  |
+| maverick_1                           | bnb      |        0.1%  |
+| swaap_2                              | bnb      |        0.0%  |
+| airswap_swap_erc20_v4                | bnb      |        0.0%  |
+| balancer_2                           | ethereum |        1.5%  |
+| fluid_1                              | ethereum |        1.5%  |
+| curve_Regular                        | ethereum |        1.3%  |
+| curve_Factory V2 updated             | ethereum |        1.3%  |
+| curve_Factory V1 Stableswap Plain    | ethereum |        1.0%  |
+| 1inch-LOP_4                          | ethereum |        0.5%  |
+| balancer_1                           | ethereum |        0.5%  |
+| maverick_2                           | ethereum |        0.5%  |
+| bancor_1                             | ethereum |        0.5%  |
+| curve_Factory V1 Stableswap Plain NG | ethereum |        0.3%  |
+| dodo_2                               | ethereum |        0.3%  |
+| uniswap_1                            | ethereum |        0.3%  |
+| 0x-API_v4                            | ethereum |        0.3%  |
+| curve_Factory V1 Meta                | ethereum |        0.3%  |
+| clipper_4                            | ethereum |        0.3%  |
+| curve_Factory V1 Plain               | ethereum |        0.3%  |
+| balancer_2                           | optimism |        3.2%  |
+| woofi_1                              | optimism |        1.4%  |
+| curve_1                              | optimism |        0.9%  |
+| swaap_2                              | optimism |        0.2%  |
+| quickswap_2                          | polygon  |       30.9%  |
+| quickswap_3                          | polygon  |       15.5%  |
+| balancer_2                           | polygon  |        3.5%  |
+| dodo_2                               | polygon  |        0.4%  |
+| dfyn_1                               | polygon  |        0.4%  |
+| kyberswap_classic                    | polygon  |        0.1%  |
+| honeyswap_2                          | polygon  |        0.1%  |
+| dodo_1                               | polygon  |        0.1%  |
+| swaap_2                              | polygon  |        0.1%  |
+</details>
+
 <h2 id="roadmap">Roadmap 🚧</h2>
 
-- [x] Cache with smart eviction policy
+- [x] Cache with least recently used eviction policy
 - [x] CLI interface
 - [ ] DEX support
-    - [ ] uniswap v4
-    - [ ] balancer
-    - [ ] Maverick
+    - [x] uniswap v4
+    - [ ] quickswap_2
 - [ ] erpc integration
 - [ ] benchmarks
 - [ ] alternative method to leverage indexed data and off-chain processing for requests involving a higher number of pools
