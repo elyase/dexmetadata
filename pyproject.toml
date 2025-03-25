@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Yaser Martinez Palenzuela", email = "yaser.martinez@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "web3>=6.0.0",
     "eth-abi>=4.0.0",
