@@ -404,7 +404,7 @@ wheels = [
 
 [[package]]
 name = "dexmetadata"
-version = "0.1.2"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "diskcache" },

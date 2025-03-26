@@ -113,22 +113,33 @@ class MetadataFetcher:
     ) -> Dict[str, Dict[str, Any]]:
         """
         Get cached results for the pool identifiers.
+        Checks both standard and chain-specific keys if chain_id is available.
         """
         if not self.use_cache or not self.cache:
             return {}
 
-        # Use chain-specific cache keys if chain_id is available
+        # Always start with regular cache keys
+        logger.debug("Checking standard cache keys first")
+        results = self.cache.get_many(normalized_identifiers)
+        
+        # If chain_id is available, also check chain-specific keys
         if hasattr(self.cache, "chain_specific_key") and self.chain_id:
             chain_specific_keys = [
                 self.cache.chain_specific_key(id, self.chain_id) 
                 for id in normalized_identifiers
             ]
-            logger.debug(f"Using chain-specific cache keys for chain_id {self.chain_id}")
-            return self.cache.get_many(chain_specific_keys)
-        else:
-            # Fallback to regular cache keys
-            logger.debug("Using standard cache keys (no chain ID)")
-            return self.cache.get_many(normalized_identifiers)
+            logger.debug(f"Also checking chain-specific cache keys for chain_id {self.chain_id}")
+            # Get results with chain-specific keys
+            chain_results = self.cache.get_many(chain_specific_keys)
+            
+            # Map from chain-specific keys back to original pool IDs
+            for i, pool_id in enumerate(normalized_identifiers):
+                chain_key = chain_specific_keys[i]
+                if chain_key in chain_results and pool_id not in results:
+                    # Only add the chain result if we don't already have a result for this pool
+                    results[pool_id] = chain_results[chain_key]
+                    
+        return results
 
     def update_cache(
         self, results_by_id: Dict[str, Dict[str, Any]], cached_keys: Set[str]
