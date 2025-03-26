@@ -1,6 +1,6 @@
 [project]
 name = "dexmetadata"
-version = "0.1.7"
+version = "0.1.8"
 description = "A deployless multicall library for fetching DEX pool metadata"
 readme = "README.md"
 authors = [
