@@ -77,8 +77,8 @@ class MetadataFetcher:
         max_concurrent_batches: int = 25,
         show_progress: bool = True,
         use_cache: bool = True,
-        cache_max_pools: int = 10000,
-        cache_max_size_mb: Optional[float] = None,
+        cache_max_pools: int = 50000,  # ~100MB at 2KB per pool
+        cache_max_size_mb: Optional[float] = 100.0,  # 100MB cache size
         cache_persist: bool = True,
     ):
         self.pool_identifiers = pool_identifiers
@@ -325,8 +325,8 @@ def fetch(
     max_concurrent_batches: int = 25,
     format: Literal["dict", "object"] = "object",
     use_cache: bool = True,
-    cache_max_pools: int = 10000,
-    cache_max_size_mb: Optional[float] = None,
+    cache_max_pools: int = 50000,  # ~100MB at 2KB per pool
+    cache_max_size_mb: Optional[float] = 100.0,  # 100MB cache size
     cache_persist: bool = True,
 ) -> List[Union[Dict[str, Any], Pool]]:
     """
