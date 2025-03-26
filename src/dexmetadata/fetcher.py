@@ -10,10 +10,8 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Set, Type, Union
 
-from web3 import Web3
 from web3.main import AsyncWeb3
 
-from .bytecode import POOL_METADATA_BYTECODE, UNISWAP_V4_METADATA_BYTECODE
 from .cache import get_default_cache
 from .constants import get_chain_id_from_network
 from .handlers import DefaultPoolFetcher, UniswapV4PoolFetcher, pool_handler_registry
@@ -121,24 +119,26 @@ class MetadataFetcher:
         # Always start with regular cache keys
         logger.debug("Checking standard cache keys first")
         results = self.cache.get_many(normalized_identifiers)
-        
+
         # If chain_id is available, also check chain-specific keys
         if hasattr(self.cache, "chain_specific_key") and self.chain_id:
             chain_specific_keys = [
-                self.cache.chain_specific_key(id, self.chain_id) 
+                self.cache.chain_specific_key(id, self.chain_id)
                 for id in normalized_identifiers
             ]
-            logger.debug(f"Also checking chain-specific cache keys for chain_id {self.chain_id}")
+            logger.debug(
+                f"Also checking chain-specific cache keys for chain_id {self.chain_id}"
+            )
             # Get results with chain-specific keys
             chain_results = self.cache.get_many(chain_specific_keys)
-            
+
             # Map from chain-specific keys back to original pool IDs
             for i, pool_id in enumerate(normalized_identifiers):
                 chain_key = chain_specific_keys[i]
                 if chain_key in chain_results and pool_id not in results:
                     # Only add the chain result if we don't already have a result for this pool
                     results[pool_id] = chain_results[chain_key]
-                    
+
         return results
 
     def update_cache(
@@ -147,33 +147,35 @@ class MetadataFetcher:
         """
         Update cache with new results.
         """
-        if not self.use_cache or not self.cache:
+        if not self.use_cache or self.cache is None:
             return
 
         new_cache_entries = {}
         for identifier, result in results_by_id.items():
             normalized_id = identifier.lower()
-            
+
             # Use chain-specific key if available
             if hasattr(self.cache, "chain_specific_key") and self.chain_id:
                 cache_key = self.cache.chain_specific_key(normalized_id, self.chain_id)
             else:
                 cache_key = normalized_id
-                
+
             # Cache all results (including invalid ones) to prevent redundant fetches
             if cache_key not in cached_keys:
                 # Always set is_valid flag based on validation result
                 is_valid = is_valid_metadata(result)
                 result["is_valid"] = is_valid
-                
+
                 # Add chain_id to cached result for future reference
                 if self.chain_id and "chain_id" not in result:
                     result["chain_id"] = self.chain_id
-                
+
                 # Log caching of invalid pools for debugging
                 if not is_valid:
-                    logger.warning(f"Caching invalid pool: {normalized_id} with key {cache_key}")
-                    
+                    logger.warning(
+                        f"Caching invalid pool: {normalized_id} with key {cache_key}"
+                    )
+
                 new_cache_entries[cache_key] = result
 
         if new_cache_entries:
