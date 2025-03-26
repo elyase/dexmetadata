@@ -196,3 +196,33 @@ class TestMetadataValidation:
         """Test that empty metadata is invalid."""
         assert not is_valid_metadata({})
         assert not is_valid_metadata(None)
+        
+    def test_is_valid_flag_implementation(self):
+        """Test that is_valid flag is properly implemented in is_valid_metadata function."""
+        # Create an invalid pool metadata
+        invalid_metadata = {
+            "pool_address": "0xf4114b3b283121432b524e16e442fe0ab9bfd63f",
+            "identifier": "0xf4114b3b283121432b524e16e442fe0ab9bfd63f",
+            "token0_address": "0x0000000000000000000000000000000000000000", # Zero address
+            "token0_name": "",
+            "token0_symbol": "",
+            "token0_decimals": 0,
+            "token1_address": "0x0000000000000000000000000000000000000000", # Zero address
+            "token1_name": "",
+            "token1_symbol": "",
+            "token1_decimals": 0
+        }
+        
+        # Verify it's properly identified as invalid
+        assert not is_valid_metadata(invalid_metadata)
+        
+        # Now add the is_valid flag explicitly and verify it's respected
+        metadata_with_flag = invalid_metadata.copy()
+        metadata_with_flag["is_valid"] = False
+        
+        assert not is_valid_metadata(metadata_with_flag)
+        
+        # If we change the flag to true, the function respects the flag
+        # This is the current behavior - is_valid flag takes precedence
+        metadata_with_flag["is_valid"] = True
+        assert is_valid_metadata(metadata_with_flag), "The is_valid flag takes precedence over token validation"

@@ -160,14 +160,19 @@ class MetadataFetcher:
             else:
                 cache_key = normalized_id
                 
-            # Only cache valid results - explicitly check is_valid flag if present
-            if cache_key not in cached_keys and is_valid_metadata(result):
-                if "is_valid" in result and not result["is_valid"]:
-                    continue  # Skip invalid results
+            # Cache all results (including invalid ones) to prevent redundant fetches
+            if cache_key not in cached_keys:
+                # Always set is_valid flag based on validation result
+                is_valid = is_valid_metadata(result)
+                result["is_valid"] = is_valid
                 
                 # Add chain_id to cached result for future reference
                 if self.chain_id and "chain_id" not in result:
                     result["chain_id"] = self.chain_id
+                
+                # Log caching of invalid pools for debugging
+                if not is_valid:
+                    logger.warning(f"Caching invalid pool: {normalized_id} with key {cache_key}")
                     
                 new_cache_entries[cache_key] = result
 
